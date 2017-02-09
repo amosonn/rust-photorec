@@ -79,3 +79,21 @@ fn test_byte_runs_ref_ctor() {
     assert_eq!(br.runs[1], ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
     assert_eq!(br.runs[2], ByteRun { file_offset: 100, disk_pos: 2000, len: 23});
 }
+
+#[test]
+fn test_byte_runs_ref_seek() {
+    let mut br = ByteRunsRef::new(123, vec![
+        ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
+        ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
+        ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
+    ]);
+    assert_eq!(br.seek(SeekFrom::Start(3)).unwrap(), 3);
+    assert_eq!(br.seek(SeekFrom::Start(6)).unwrap(), 6);
+    assert_eq!(br.seek(SeekFrom::Current(0x7ffffffffffffff0)).unwrap(), 0x7ffffffffffffff6);
+    assert_eq!(br.seek(SeekFrom::Current(0x10)).unwrap(), 0x8000000000000006);
+    assert!(br.seek(SeekFrom::Current(0x7ffffffffffffffd)).is_err());
+    assert_eq!(br.seek(SeekFrom::Current(-0x8000000000000000)).unwrap(), 6);
+    assert_eq!(br.seek(SeekFrom::End(10)).unwrap(), 133);
+    assert_eq!(br.seek(SeekFrom::End(-10)).unwrap(), 113);
+    assert!(br.seek(SeekFrom::End(-1000)).is_err());
+}
