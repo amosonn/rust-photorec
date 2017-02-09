@@ -47,6 +47,29 @@ impl ByteRunsRef {
         }
         Ok(pos)
     }
+
+    pub fn desc_read(&mut self, n: u64) -> ByteRun {
+        let mut ret = ByteRun {
+            file_offset: self.pos,
+            disk_pos: 0,
+            len: 0,
+        };
+        if self.cur_run != self.runs.len() {
+            ret.disk_pos = self.runs[cur_run].disk_pos + self.offset_in_run;
+            let rem = self.runs[cur_run].len - self.offset_in_run;
+            if n < rem {
+                ret.len = n;
+                self.pos += n;
+                self.offset_in_run += n;
+            } else {
+                ret.len = rem;
+                self.pos += rem;
+                self.cur_run += 1;
+                self.offset_in_run = 0;
+            }
+        }
+        ret
+    }
 }
 
 impl Seek for ByteRunsRef {
