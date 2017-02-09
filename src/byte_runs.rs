@@ -18,8 +18,8 @@ pub struct ByteRunsRef {
 }
 
 impl ByteRunsRef {
-    pub fn new<T>(size: u64, it: T) -> Self where T: Iterator<Item=ByteRun> {
-        let mut runs: Vec<ByteRun> = it.collect();
+    pub fn new<T>(size: u64, it: T) -> Self where T: IntoIterator<Item=ByteRun> {
+        let mut runs: Vec<ByteRun> = it.into_iter().collect();
         let gross_size = &runs.iter().map(|br| br.len).sum();
         runs.split_last_mut().unwrap().0.len -= gross_size - size;
         runs.sort();
