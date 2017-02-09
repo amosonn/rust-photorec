@@ -2,7 +2,7 @@
 use std::io::{Seek, SeekFrom};
 use std::io;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ByteRun {
     file_offset: u64,
     disk_pos: u64,
@@ -21,8 +21,8 @@ impl ByteRunsRef {
     pub fn new<T>(size: u64, it: T) -> Self where T: IntoIterator<Item=ByteRun> {
         let mut runs: Vec<ByteRun> = it.into_iter().collect();
         let gross_size = &runs.iter().map(|br| br.len).sum();
-        runs.split_last_mut().unwrap().0.len -= gross_size - size;
         runs.sort();
+        runs.split_last_mut().unwrap().0.len -= gross_size - size;
         ByteRunsRef {
             runs: runs.into_boxed_slice(),
             size: size,
@@ -66,4 +66,17 @@ impl Seek for ByteRunsRef {
             None => Err(io::Error::new(io::ErrorKind::InvalidInput, "Bad seek pos.")),
         }
     }
+}
+
+#[test]
+fn test_byte_runs_ref_ctor() {
+    let br = ByteRunsRef::new(123, vec![
+        ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
+        ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
+        ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
+    ]);
+    assert_eq!(br.size, 123);
+    assert_eq!(br.runs[0], ByteRun { file_offset: 0, disk_pos: 16000, len: 50});
+    assert_eq!(br.runs[1], ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
+    assert_eq!(br.runs[2], ByteRun { file_offset: 100, disk_pos: 2000, len: 23});
 }
