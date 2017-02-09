@@ -21,6 +21,7 @@ impl ByteRunsRef {
     pub fn new(size: u64, mut runs: Vec<ByteRun>) -> Self {
         runs.sort();
         let gross_size = &runs.iter().map(|br| br.len).sum();
+        // FIXME: check that the runs actually make one whole file!
         runs.split_last_mut().unwrap().0.len -= gross_size - size;
         ByteRunsRef {
             runs: runs.into_boxed_slice(),
