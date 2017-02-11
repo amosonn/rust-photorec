@@ -4,9 +4,9 @@ use std::io;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ByteRun {
-    file_offset: u64,
-    disk_pos: u64,
-    len: u64,
+    pub file_offset: u64,
+    pub disk_pos: u64,
+    pub len: u64,
 }
 
 pub struct ByteRunsRef {
@@ -48,15 +48,16 @@ impl ByteRunsRef {
         Ok(pos)
     }
 
-    pub fn desc_read(&mut self, n: u64) -> ByteRun {
+    pub fn desc_read(&mut self, n: usize) -> ByteRun {
+        let n = n as u64;
         let mut ret = ByteRun {
             file_offset: self.pos,
             disk_pos: 0,
             len: 0,
         };
         if self.cur_run != self.runs.len() {
-            ret.disk_pos = self.runs[cur_run].disk_pos + self.offset_in_run;
-            let rem = self.runs[cur_run].len - self.offset_in_run;
+            ret.disk_pos = self.runs[self.cur_run].disk_pos + self.offset_in_run;
+            let rem = self.runs[self.cur_run].len - self.offset_in_run;
             if n < rem {
                 ret.len = n;
                 self.pos += n;
