@@ -158,6 +158,34 @@ fn test_byte_runs_ref_ctor() {
 }
 
 #[test]
+fn test_byte_runs_ref_ctor_integrity() {
+    if let Err(ByteRunsRefError::Empty) = ByteRunsRef::new(123, vec![
+    ]) {
+    } else { panic!(); }
+    if let Err(ByteRunsRefError::PreGap(y)) = ByteRunsRef::new(123, vec![
+        ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
+        ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
+    ]) {
+        assert_eq!(y, ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
+    } else { panic!(); }
+    if let Err(ByteRunsRefError::Gap(x, y)) = ByteRunsRef::new(123, vec![
+        ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
+        ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
+    ]) {
+        assert_eq!(x, ByteRun { file_offset: 0, disk_pos: 16000, len: 50});
+        assert_eq!(y, ByteRun { file_offset: 100, disk_pos: 2000, len: 50});
+    } else { panic!(); }
+    if let Err(ByteRunsRefError::Overlap(x, y)) = ByteRunsRef::new(123, vec![
+        ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
+        ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
+        ByteRun { file_offset: 0, disk_pos: 16000, len: 60 },
+    ]) {
+        assert_eq!(x, ByteRun { file_offset: 0, disk_pos: 16000, len: 60});
+        assert_eq!(y, ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
+    } else { panic!(); }
+}
+
+#[test]
 fn test_byte_runs_ref_seek() {
     let mut br = ByteRunsRef::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
