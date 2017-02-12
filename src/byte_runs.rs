@@ -1,6 +1,8 @@
 
 use std::io::{Seek, SeekFrom};
 use std::io;
+use std::fmt;
+use std::error::Error;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ByteRun {
@@ -9,6 +11,13 @@ pub struct ByteRun {
     pub len: u64,
 }
 
+impl fmt::Display for ByteRun {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(file_offset: {}, disk_pos: {}, len: {})", self.file_offset, self.disk_pos, self.len)
+    }
+}
+
+#[derive(Debug)]
 pub struct ByteRunsRef {
     runs: Box<[ByteRun]>,
     size: u64,
@@ -17,19 +26,62 @@ pub struct ByteRunsRef {
     offset_in_run: u64,
 }
 
+#[derive(Debug)]
+pub enum ByteRunsRefError {
+    Overlap(ByteRun, ByteRun),
+    Gap(ByteRun, ByteRun),
+    PreGap(ByteRun),
+    Empty,
+}
+
+impl fmt::Display for ByteRunsRefError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ByteRunsRefError::Overlap(x, y) => write!(f, "Error constructing ByteRunsRef: {} and {} are overlapping", x, y),
+            ByteRunsRefError::Gap(x, y) => write!(f, "Error constructing ByteRunsRef: Gap between {} and {}", x, y),
+            ByteRunsRefError::PreGap(y) => write!(f, "Error constructing ByteRunsRef: Gap between beginning and {}", y),
+            ByteRunsRefError::Empty => write!(f, "Error constructing ByteRunsRef: No ByteRuns given"),
+        }
+    }
+}
+
+impl Error for ByteRunsRefError {
+    fn description(&self) -> &str {
+        match *self {
+            ByteRunsRefError::Overlap(_, _) => "Overlapping ByteRuns.",
+            ByteRunsRefError::Gap(_, _) => "Gap between ByteRuns.",
+            ByteRunsRefError::PreGap(_) => "Gap before ByteRuns.",
+            ByteRunsRefError::Empty => "No ByteRuns.",
+        }
+    }
+}
+
 impl ByteRunsRef {
-    pub fn new(size: u64, mut runs: Vec<ByteRun>) -> Self {
+    pub fn new(size: u64, mut runs: Vec<ByteRun>) -> Result<Self, ByteRunsRefError> {
+        if runs.len() == 0 { return Err(ByteRunsRefError::Empty); }
         runs.sort();
-        let gross_size = &runs.iter().map(|br| br.len).sum();
-        // FIXME: check that the runs actually make one whole file!
-        runs.split_last_mut().unwrap().0.len -= gross_size - size;
-        ByteRunsRef {
+        let mut off = 0;
+        {
+            let mut it = runs.iter();
+            let mut br = it.next().unwrap();
+            if br.file_offset != 0 { return Err(ByteRunsRefError::PreGap(*br)); }
+            off += br.len;
+            for br2 in it {
+                if br2.file_offset > off { return Err(ByteRunsRefError::Gap(*br, *br2)); }
+                else if br2.file_offset < off { return Err(ByteRunsRefError::Overlap(*br, *br2)); }
+                br = br2;
+                off += br.len;
+            }
+        }
+        // We could do this inside, but then the entire iter has to be mut...
+        runs.last_mut().unwrap().len -= off - size;
+        Ok(ByteRunsRef {
             runs: runs.into_boxed_slice(),
             size: size,
             pos: 0,
             cur_run: 0,
             offset_in_run: 0,
-        }
+        })
     }
 
     fn set_pos(&mut self, pos: u64) -> io::Result<u64> {
@@ -98,7 +150,7 @@ fn test_byte_runs_ref_ctor() {
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
-    ]);
+    ]).unwrap();
     assert_eq!(br.size, 123);
     assert_eq!(br.runs[0], ByteRun { file_offset: 0, disk_pos: 16000, len: 50});
     assert_eq!(br.runs[1], ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
@@ -111,7 +163,7 @@ fn test_byte_runs_ref_seek() {
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
-    ]);
+    ]).unwrap();
     assert_eq!(br.seek(SeekFrom::Start(3)).unwrap(), 3);
     assert_eq!(br.seek(SeekFrom::Start(6)).unwrap(), 6);
     assert_eq!(br.seek(SeekFrom::Current(0x7ffffffffffffff0)).unwrap(), 0x7ffffffffffffff6);
