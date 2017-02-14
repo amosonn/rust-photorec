@@ -17,6 +17,10 @@ impl fmt::Display for ByteRun {
     }
 }
 
+pub trait DescRead {
+    fn desc_read(&mut self, n: usize) -> ByteRun;
+}
+
 #[derive(Debug)]
 pub struct ByteRunsRef {
     runs: Box<[ByteRun]>,
@@ -99,8 +103,10 @@ impl ByteRunsRef {
         }
         Ok(pos)
     }
+}
 
-    pub fn desc_read(&mut self, n: usize) -> ByteRun {
+impl DescRead for ByteRunsRef {
+    fn desc_read(&mut self, n: usize) -> ByteRun {
         let n = n as u64;
         let mut ret = ByteRun {
             file_offset: self.pos,

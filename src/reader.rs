@@ -2,11 +2,11 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
 
-use super::byte_runs::ByteRunsRef;
+use super::byte_runs::{DescRead, ByteRunsRef};
 
 
-pub struct ByteRunsReader<R> {
-    brf: ByteRunsRef,
+pub struct ByteRunsReader<R, D = ByteRunsRef> {
+    describer: D,
     inner: R,
 }
 
@@ -17,14 +17,14 @@ pub struct ByteRunsReader<R> {
     //}
 
 
-impl<R> Seek for ByteRunsReader<R> {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> { self.brf.seek(pos) }
+impl<R, D: Seek> Seek for ByteRunsReader<R, D> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> { self.describer.seek(pos) }
 }
 
 
-impl<R: Read+Seek> Read for ByteRunsReader<R> {
+impl<R: Read+Seek, D: DescRead> Read for ByteRunsReader<R, D> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let desc = self.brf.desc_read(buf.len());
+        let desc = self.describer.desc_read(buf.len());
         if desc.len == 0 { return Ok(0); }
         // FIXME types.
         let buf2 = &mut buf[..(desc.len as usize)];
