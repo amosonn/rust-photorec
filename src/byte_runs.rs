@@ -18,7 +18,7 @@ impl fmt::Display for ByteRun {
 }
 
 pub trait DescRead {
-    fn desc_read(&mut self, n: usize) -> ByteRun;
+    fn desc_read(&mut self) -> ByteRun;
     fn adv(&mut self, n: usize);
 }
 
@@ -107,16 +107,13 @@ impl ByteRunsRef {
 }
 
 impl DescRead for ByteRunsRef {
-    fn desc_read(&mut self, n: usize) -> ByteRun {
+    fn desc_read(&mut self) -> ByteRun {
         if self.cur_run != self.runs.len() {
-            let rem = self.runs[self.cur_run].len - self.offset_in_run;
-            let out = ByteRun {
+            ByteRun {
                 file_offset: self.pos,
                 disk_pos: self.runs[self.cur_run].disk_pos + self.offset_in_run,
-                len: rem,
-            };
-            self.adv(::std::cmp::min(n, rem as usize));
-            out
+                len: self.runs[self.cur_run].len - self.offset_in_run,
+            }
         } else {
             ByteRun {
                 file_offset: self.pos,
