@@ -19,6 +19,7 @@ impl fmt::Display for ByteRun {
 
 pub trait DescRead {
     fn desc_read(&mut self, n: usize) -> ByteRun;
+    fn adv(&mut self, n: usize);
 }
 
 #[derive(Debug)]
@@ -107,27 +108,37 @@ impl ByteRunsRef {
 
 impl DescRead for ByteRunsRef {
     fn desc_read(&mut self, n: usize) -> ByteRun {
-        let n = n as u64;
-        let mut ret = ByteRun {
-            file_offset: self.pos,
-            disk_pos: 0,
-            len: 0,
-        };
         if self.cur_run != self.runs.len() {
-            ret.disk_pos = self.runs[self.cur_run].disk_pos + self.offset_in_run;
             let rem = self.runs[self.cur_run].len - self.offset_in_run;
-            if n < rem {
-                ret.len = n;
-                self.pos += n;
-                self.offset_in_run += n;
-            } else {
-                ret.len = rem;
-                self.pos += rem;
-                self.cur_run += 1;
-                self.offset_in_run = 0;
+            let out = ByteRun {
+                file_offset: self.pos,
+                disk_pos: self.runs[self.cur_run].disk_pos + self.offset_in_run,
+                len: rem,
+            };
+            self.adv(::std::cmp::min(n, rem as usize));
+            out
+        } else {
+            ByteRun {
+                file_offset: self.pos,
+                disk_pos: 0,
+                len: 0,
             }
         }
-        ret
+    }
+
+    fn adv(&mut self, n: usize) {
+        let n = n as u64;
+        let rem = self.runs[self.cur_run].len - self.offset_in_run;
+        if n < rem {
+            self.pos += n;
+            self.offset_in_run += n;
+        } else if n == rem {
+            self.pos += rem;
+            self.cur_run += 1;
+            self.offset_in_run = 0;
+        } else {
+            panic!("Should only read up to end of ByteRun.")
+        }
     }
 }
 
