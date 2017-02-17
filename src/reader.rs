@@ -32,3 +32,22 @@ impl<R: Read+Seek, D: DescRead> Read for ByteRunsReader<R, D> {
         self.inner.seek(SeekFrom::Start(desc.disk_pos)).and_then(|_| self.inner.read(buf2))
     }
 }
+
+
+#[test]
+fn test_byte_runs_reader_easy() {
+    use super::byte_runs::ByteRun;
+    let br = ByteRunsRef::new(18, vec![
+        ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
+        ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
+        ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
+    ]).unwrap();
+    let reader = io::Cursor::new((0..26).collect::<Vec<u8>>());
+    let mut brr = ByteRunsReader {
+        describer: br,
+        inner: reader,
+    };
+    let mut out = Vec::<u8>::with_capacity(18);
+    assert_eq!(brr.read_to_end(&mut out).unwrap(), 18);
+    assert_eq!(out, vec![0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25]);
+}
