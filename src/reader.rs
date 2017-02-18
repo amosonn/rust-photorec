@@ -10,11 +10,14 @@ pub struct ByteRunsReader<R, D = ByteRunsRef> {
     inner: R,
 }
 
-//impl ByteRunsReader {
-    //pub fn new() -> Self {
-        //ByteRunsReader {
-
-    //}
+impl<R, D> ByteRunsReader<R, D> {
+    pub fn new(reader: R, describer: D) -> Self {
+        ByteRunsReader {
+            describer: describer,
+            inner: reader,
+        }
+    }
+}
 
 
 impl<R, D: Seek> Seek for ByteRunsReader<R, D> {
