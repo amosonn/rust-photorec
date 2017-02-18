@@ -5,3 +5,4 @@ authors = ["Amos Onn <amosonn@gmail.com>"]
 description = "Rust interface for using photorec report.xml files."
 
 [dependencies]
+xmltree = "0.3.2"
