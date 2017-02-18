@@ -1,4 +1,7 @@
-
+//
+// The description of a "fileobject" - a collection of ByteRuns, mapping from
+// a byte run in the disk to the parts of a file.
+//
 use std::io::{Seek, SeekFrom};
 use std::io;
 use std::fmt;

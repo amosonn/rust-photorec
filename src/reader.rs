@@ -1,4 +1,7 @@
-
+//
+// A struct for reading (impl Read) from a reader (usu. disk) according to
+// a DescRead descriptor of the mapping from disk to file.
+//
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
 
