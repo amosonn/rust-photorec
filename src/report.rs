@@ -234,10 +234,10 @@ fn test_report_xml_parse() {
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140247350_assets.zip");
     let e = rx.next().unwrap().err().unwrap();
-    match e {
-      ReportXmlError::BadByteRunsRef(x, e) => assert_eq!(x, "f140247350_assets.zip"),
-      _ => panic!(),
-    }
+    assert_let!(ReportXmlError::BadByteRunsRef(x, e) = e, {
+        assert_eq!(x, "f140247350_assets.zip");
+        assert_let!(ByteRunsRefError::Empty = e);
+    });
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140197124_res.zip");
     assert!(rx.next().is_none());
