@@ -5,10 +5,10 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
 
-use super::byte_runs::{DescRead, ByteRunsRef};
+use super::byte_runs::{DescRead, ByteRunsRef, ByteRunsRefPos};
 
 
-pub struct ByteRunsReader<R, D = ByteRunsRef> {
+pub struct ByteRunsReader<R, D> {
     describer: D,
     inner: R,
 }
@@ -48,9 +48,10 @@ fn test_byte_runs_reader_easy() {
         ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
         ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
     ]).unwrap();
+    let brf = ByteRunsRefPos::from(&br);
     let reader = io::Cursor::new((0..26).collect::<Vec<u8>>());
     let mut brr = ByteRunsReader {
-        describer: br,
+        describer: brf,
         inner: reader,
     };
     let mut out = Vec::<u8>::with_capacity(18);
@@ -90,9 +91,10 @@ fn test_byte_runs_reader_hard() {
         ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
         ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
     ]).unwrap();
+    let brf = ByteRunsRefPos::from(&br);
     let reader = LameCursor::new((0..26).collect::<Vec<u8>>());
     let mut brr = ByteRunsReader {
-        describer: br,
+        describer: brf,
         inner: reader,
     };
     let mut out = Vec::<u8>::with_capacity(18);
