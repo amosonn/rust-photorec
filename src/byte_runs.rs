@@ -26,6 +26,12 @@ pub trait DescRead {
     fn adv(&mut self, n: usize);
 }
 
+// FIXME: will replace once Associated Type Constructors (PR RFC #1598) lands.
+pub trait Desc<'a> {
+    type DescReader: DescRead;
+    fn at_pos(&'a self, pos: u64) -> Self::DescReader;
+}
+
 #[derive(Debug)]
 pub struct ByteRunsRef {
     runs: Box<[ByteRun]>,
@@ -94,8 +100,12 @@ impl ByteRunsRef {
             size: size,
         })
     }
+}
 
-    pub fn at_pos(&self, pos: u64) -> ByteRunsRefPos {
+impl<'a> Desc<'a> for ByteRunsRef {
+    type DescReader = ByteRunsRefPos<'a>;
+
+    fn at_pos(&'a self, pos: u64) -> ByteRunsRefPos<'a> {
         if pos > self.size {
             ByteRunsRefPos {
                 _ref: &self,
