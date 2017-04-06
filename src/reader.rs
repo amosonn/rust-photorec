@@ -4,6 +4,7 @@
 //
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
+use std::cmp::min;
 
 use super::byte_runs::{DescRead, ByteRunsRef, ByteRunsRefPos};
 
@@ -32,7 +33,8 @@ impl<R: Read+Seek, D: DescRead> Read for ByteRunsReader<R, D> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let desc = self.describer.desc_read();
         if desc.len == 0 { return Ok(0); }
-        let buf2 = &mut buf[..(desc.len as usize)];
+        let max_len = min(buf.len(), desc.len as usize);
+        let buf2 = &mut buf[..max_len];
         self.inner.seek(SeekFrom::Start(desc.disk_pos))
             .and_then(|_| self.inner.read(buf2))
             .and_then(|n| {self.describer.adv(n); Ok(n)})
@@ -59,6 +61,27 @@ fn test_byte_runs_reader_easy() {
     assert_eq!(out, vec![0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25]);
 }
 
+#[test]
+fn test_byte_runs_reader_small_read() {
+    use super::byte_runs::ByteRun;
+    let br = ByteRunsRef::new(18, vec![
+        ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
+        ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
+        ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
+    ]).unwrap();
+    let brf = ByteRunsRefPos::from(&br);
+    let reader = io::Cursor::new((0..26).collect::<Vec<u8>>());
+    let mut brr = ByteRunsReader {
+        describer: brf,
+        inner: reader,
+    };
+    let mut out = vec![0; 3];
+    assert_eq!(brr.read(out.as_mut_slice()).unwrap(), 3);
+    assert_eq!(out, vec![0, 1, 2]);
+    assert_eq!(brr.seek(SeekFrom::Start(11)).unwrap(), 11);
+    assert_eq!(brr.read(out.as_mut_slice()).unwrap(), 1);
+    assert_eq!(out, vec![15, 1, 2]);
+}
 
 #[test]
 fn test_byte_runs_reader_hard() {
