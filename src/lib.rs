@@ -11,6 +11,10 @@ mod byte_runs;
 mod reader;
 mod report;
 
+#[cfg(feature = "filesystem")]
+mod reader_at;
+
+
 pub use byte_runs::{ByteRun, ByteRunsRef};
 pub use reader::ByteRunsReader;
 
