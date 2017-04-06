@@ -1,6 +1,9 @@
 
 extern crate xmltree;
 
+#[cfg(feature = "filesystem")]
+extern crate fuse_fl;
+
 #[macro_use]
 mod tests;
 
