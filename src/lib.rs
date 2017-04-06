@@ -1,4 +1,6 @@
 
+extern crate xmltree;
+
 #[macro_use]
 mod tests;
 
@@ -8,8 +10,6 @@ mod report;
 
 pub use byte_runs::{ByteRun, ByteRunsRef};
 pub use reader::ByteRunsReader;
-
-extern crate xmltree;
 
 #[test]
 fn it_works() {
