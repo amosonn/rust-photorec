@@ -10,3 +10,8 @@ fuse_fl = { git = "https://github.com/amosonn/rust_fuse_fl", optional = true }
 
 [features]
 filesystem = ["fuse_fl"]
+
+[[bin]]
+name = "photorecfs"
+path = "src/bin/photorecfs.rs"
+required-features = ["filesystem"]
