@@ -3,6 +3,8 @@ extern crate xmltree;
 
 #[cfg(feature = "filesystem")]
 extern crate fuse_fl;
+#[cfg(feature = "filesystem")]
+extern crate serde;
 
 #[macro_use]
 mod tests;
@@ -13,6 +15,8 @@ mod report;
 
 #[cfg(feature = "filesystem")]
 mod reader_at;
+#[cfg(feature = "filesystem")]
+mod filesystem;
 
 
 pub use byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefPos, ByteRunsRefError};
