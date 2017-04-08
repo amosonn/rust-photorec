@@ -15,8 +15,12 @@ mod report;
 mod reader_at;
 
 
-pub use byte_runs::{ByteRun, ByteRunsRef};
+pub use byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefPos, ByteRunsRefError};
 pub use reader::ByteRunsReader;
+pub use report::{ReportXml, ReportXmlError};
+
+#[cfg(feature = "filesystem")]
+pub use reader_at::ByteRunsReaderAt;
 
 #[test]
 fn it_works() {
