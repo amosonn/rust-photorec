@@ -4,6 +4,8 @@ extern crate xmltree;
 #[cfg(feature = "filesystem")]
 extern crate fuse_fl;
 #[cfg(feature = "filesystem")]
+extern crate libc;
+#[cfg(feature = "filesystem")]
 extern crate serde;
 #[cfg(feature = "filesystem")]
 #[macro_use]

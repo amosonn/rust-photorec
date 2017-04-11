@@ -9,6 +9,7 @@ use std::error::Error;
 use std::mem;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
+#[cfg_attr(feature = "filesystem", derive(Serialize, Deserialize))]
 pub struct ByteRun {
     pub file_offset: u64,
     pub disk_pos: u64,
@@ -32,7 +33,8 @@ pub trait Desc<'a> {
     fn at_pos(&'a self, pos: u64) -> Self::DescReader;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "filesystem", derive(Serialize, Deserialize))]
 pub struct ByteRunsRef {
     runs: Box<[ByteRun]>,
     size: u64,
