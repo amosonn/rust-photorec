@@ -5,6 +5,9 @@ extern crate xmltree;
 extern crate fuse_fl;
 #[cfg(feature = "filesystem")]
 extern crate serde;
+#[cfg(feature = "filesystem")]
+#[macro_use]
+extern crate serde_derive;
 
 #[macro_use]
 mod tests;
