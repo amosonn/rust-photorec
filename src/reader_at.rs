@@ -2,7 +2,9 @@
 // A struct for reading (impl Read) from a reader (usu. disk) according to
 // a DescRead descriptor of the mapping from disk to file.
 //
-use fuse_fl::{ReadFileLike, Result};
+use fuse_fl::Result;
+use fuse_fl::filelike::ReadFileLike;
+
 
 use super::byte_runs::{Desc, DescRead};
 
@@ -54,7 +56,7 @@ impl<R, D> ReadFileLike for ByteRunsReaderAt<R, D> where R: ReadFileLike, D: for
 mod tests {
     use super::super::byte_runs::{ByteRunsRef, ByteRun};
     use super::ByteRunsReaderAt;
-    use fuse_fl::ReadFileLike;
+    use fuse_fl::filelike::ReadFileLike;
 
     #[test]
     fn test_byte_runs_reader_at_short() {
