@@ -17,71 +17,69 @@ pub struct ReportXml {
     iter: vec::IntoIter<Element>,
 }
 
+type Result<T> = std::result::Result<T, ReportXmlError>;
 
 #[derive(Error, Debug)]
 pub enum ReportXmlError {
     #[error("Error parsing: {0}")]
     Parse(#[from] ParseError),
     #[error("Missing field {0} in xml")]
-    MissingField(String),
-    #[error("Missing text in field {0} in xml")]
-    MissingText(String),
-    #[error("Missing attr {0} in field <missing> in xml")]
-    MissingAttr(String),
-    #[error("Malformed text in field {0} in xml, parse error: {1}")]
-    MalformedText(String, #[source] num::ParseIntError),
-    #[error("Malformed attr {0} in field <missing> in xml, parse error: {1}")]
-    MalformedAttr(String, #[source] num::ParseIntError),
-    #[error("File {0} has a bad ByteRunsRef: {1}")]
-    BadByteRunsRef(String, #[source] ByteRunsRefError),
+    MissingField(&'static str),
+    #[error("Missing text in field {field_name} in xml")]
+    MissingText { field_name: String },
+    #[error("Missing attr {attr_name} in field {field_name} in xml")]
+    MissingAttr { attr_name: &'static str, field_name: String },
+    #[error("Malformed text in field {field_name} in xml, parse error: {source}")]
+    MalformedText { field_name: String, #[source] source: num::ParseIntError },
+    #[error("Malformed attr {attr_name} in field {field_name} in xml, parse error: {source}")]
+    MalformedAttr { attr_name: &'static str, field_name: String, #[source] source: num::ParseIntError },
+    #[error("File {file_name} has a bad ByteRunsRef: {source}")]
+    BadByteRunsRef { file_name: String, #[source] source: ByteRunsRefError },
 }
 
-
-macro_rules! try_child {
-    ( $elem:expr, $name:expr ) => {
-        { $elem.get_child($name).ok_or(ReportXmlError::MissingField($name.to_string()))? }
-    }
+fn get_child<'a>(elem: &'a Element, name: &'static str) -> Result<&'a Element> {
+    elem.get_child(name).ok_or(ReportXmlError::MissingField(name))
 }
 
-macro_rules! try_text {
-    ( $elem:expr ) => {
-        { 
-            let elem = $elem;
-            elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone()))?
-        }
-    }
+fn get_text<'a>(elem: &'a Element) -> Result<&'a String> {
+    elem.text.as_ref().ok_or(ReportXmlError::MissingText { field_name: elem.name.clone() })
 }
 
-macro_rules! try_number {
-    ( $elem:expr ) => {
-        { 
-            let elem = $elem;
-            let x = elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone()))?;
-            x.parse::<u64>().map_err(|e| ReportXmlError::MalformedText(elem.name.clone(), e))?
-        }
-    }
+fn get_number<'a>(elem: &'a Element) -> Result<u64> {
+    let x = get_text(elem)?;
+    x.parse::<u64>().map_err(|e| ReportXmlError::MalformedText { field_name: elem.name.clone(), source: e })
 }
 
-macro_rules! try_attr_number {
-    ( $elem:expr, $name:expr ) => {
-        { 
-            let x = $elem.attributes.get($name).ok_or(ReportXmlError::MissingAttr($name.to_string()))?;
-            x.parse::<u64>().map_err(|e| ReportXmlError::MalformedAttr($name.to_string(), e))?
-        }
-    }
+fn get_attr_number<'a>(elem: &'a Element, name: &'static str) -> Result<u64> {
+    let x = elem.attributes.get(name).ok_or(ReportXmlError::MissingAttr { attr_name: name, field_name: elem.name.clone() })?;
+    x.parse::<u64>().map_err(|e| ReportXmlError::MalformedAttr { attr_name: name, field_name: elem.name.clone(), source: e })
 }
 
+fn to_byte_runs_ref(elem: Element) -> Result<(String, ByteRunsRef)> {
+    let name = get_text(get_child(&elem, "filename")?)?.clone();
+    let size = get_number(get_child(&elem, "filesize")?)?;
+    let byte_runs = get_child(&elem, "byte_runs")?.children.iter()
+        .map(|x| -> Result<ByteRun> {
+            let file_offset = get_attr_number(x, "offset")?;
+            let disk_pos = get_attr_number(x, "img_offset")?;
+            let len = get_attr_number(x, "len")?;
+            Ok(ByteRun { file_offset, disk_pos, len })
+        }).collect::<Result<Vec<ByteRun>>>()?;
+    let byte_runs_ref = ByteRunsRef::new(size, byte_runs)
+        .map_err(|e| ReportXmlError::BadByteRunsRef { file_name: name.clone(), source: e })?;
+    Ok((name, byte_runs_ref))
+}
 
 impl ReportXml {
-    pub fn parse<R: Read>(reader: R) -> Result<Self, ReportXmlError> {
+    pub fn parse<R: Read>(reader: R) -> Result<Self> {
         let elem = Element::parse(reader)?;
         let image_filename = {
-            let source = try_child!(elem, "source");
-            let source = try_child!(source, "image_filename");
-            try_text!(source).clone()
+            let source = get_child(&elem, "source")?;
+            let source = get_child(source, "image_filename")?;
+            get_text(source)?
         };
         Ok(ReportXml {
-            image_filename: image_filename,
+            image_filename: image_filename.clone(),
             iter: elem.children.into_iter(),
         })
     }
@@ -89,33 +87,10 @@ impl ReportXml {
     pub fn image_filename(&self) -> &String { &self.image_filename }
 }
 
-macro_rules! get {
-    ($expr:expr) => (match $expr {
-        Option::Some(val) => val,
-        Option::None => { return Option::None }
-    })
-}
-
 impl Iterator for ReportXml {
-    type Item = Result<(String, ByteRunsRef), ReportXmlError>;
+    type Item = Result<(String, ByteRunsRef)>;
     fn next(&mut self) -> Option<Self::Item> {
-        let elem = get!(self.iter.find(|ref x| x.name == "fileobject"));
-        fn inner(elem: Element) -> Result<(String, ByteRunsRef), ReportXmlError> {
-            let name = try_text!(try_child!(elem, "filename")).clone();
-            let size = try_number!(try_child!(elem, "filesize"));
-            let byte_runs = try_child!(elem, "byte_runs").children.iter()
-                .map(|x| -> Result<ByteRun, ReportXmlError> {
-                    Ok(ByteRun {
-                        file_offset: try_attr_number!(x, "offset"),
-                        disk_pos: try_attr_number!(x, "img_offset"),
-                        len: try_attr_number!(x, "len"),
-                    })
-                }).collect::<Result<Vec<ByteRun>, ReportXmlError>>()?;
-            let byte_runs_ref = ByteRunsRef::new(size, byte_runs)
-                .map_err(|e| ReportXmlError::BadByteRunsRef(name.clone(), e))?;
-            Ok((name, byte_runs_ref))
-        }
-        Some(inner(elem))
+        self.iter.find(|ref x| x.name == "fileobject").map(to_byte_runs_ref)
     }
 }
 
@@ -193,7 +168,7 @@ fn test_report_xml_parse() {
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140247350_assets.zip");
     let e = rx.next().unwrap().err().unwrap();
-    assert_let!(ReportXmlError::BadByteRunsRef(x, e) = e, {
+    assert_let!(ReportXmlError::BadByteRunsRef { file_name: x, source: e } = e, {
         assert_eq!(x, "f140247350_assets.zip");
         assert_let!(ByteRunsRefError::Empty = e);
     });
