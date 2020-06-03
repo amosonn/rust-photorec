@@ -26,9 +26,9 @@ mod reader_at;
 mod filesystem;
 
 
-pub use byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefPos, ByteRunsRefError};
-pub use reader::ByteRunsReader;
-pub use report::{ReportXml, ReportXmlError};
+pub use crate::byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefPos, ByteRunsRefError};
+pub use crate::reader::ByteRunsReader;
+pub use crate::report::{ReportXml, ReportXmlError};
 
 #[cfg(feature = "filesystem")]
 pub use reader_at::ByteRunsReaderAt;

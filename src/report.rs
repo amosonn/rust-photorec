@@ -59,7 +59,7 @@ impl Error for ReportXmlError {
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match *self {
             ReportXmlError::Parse(ref x) => Some(x),
             ReportXmlError::MissingField(_) => None,
@@ -79,7 +79,7 @@ impl From<ParseError> for ReportXmlError {
 
 macro_rules! try_child {
     ( $elem:expr, $name:expr ) => {
-        { try!($elem.get_child($name).ok_or(ReportXmlError::MissingField($name.to_string()))) }
+        { $elem.get_child($name).ok_or(ReportXmlError::MissingField($name.to_string()))? }
     }
 }
 
@@ -87,7 +87,7 @@ macro_rules! try_text {
     ( $elem:expr ) => {
         { 
             let elem = $elem;
-            try!(elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone())))
+            elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone()))?
         }
     }
 }
@@ -96,8 +96,8 @@ macro_rules! try_number {
     ( $elem:expr ) => {
         { 
             let elem = $elem;
-            let x = try!(elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone())));
-            try!(x.parse::<u64>().map_err(|e| ReportXmlError::MalformedText(elem.name.clone(), e)))
+            let x = elem.text.as_ref().ok_or(ReportXmlError::MissingText(elem.name.clone()))?;
+            x.parse::<u64>().map_err(|e| ReportXmlError::MalformedText(elem.name.clone(), e))?
         }
     }
 }
@@ -105,8 +105,8 @@ macro_rules! try_number {
 macro_rules! try_attr_number {
     ( $elem:expr, $name:expr ) => {
         { 
-            let x = try!($elem.attributes.get($name).ok_or(ReportXmlError::MissingAttr($name.to_string())));
-            try!(x.parse::<u64>().map_err(|e| ReportXmlError::MalformedAttr($name.to_string(), e)))
+            let x = $elem.attributes.get($name).ok_or(ReportXmlError::MissingAttr($name.to_string()))?;
+            x.parse::<u64>().map_err(|e| ReportXmlError::MalformedAttr($name.to_string(), e))?
         }
     }
 }
@@ -114,7 +114,7 @@ macro_rules! try_attr_number {
 
 impl ReportXml {
     pub fn parse<R: Read>(reader: R) -> Result<Self, ReportXmlError> {
-        let elem = try!(Element::parse(reader));
+        let elem = Element::parse(reader)?;
         let image_filename = {
             let source = try_child!(elem, "source");
             let source = try_child!(source, "image_filename");
@@ -143,17 +143,16 @@ impl Iterator for ReportXml {
         fn inner(elem: Element) -> Result<(String, ByteRunsRef), ReportXmlError> {
             let name = try_text!(try_child!(elem, "filename")).clone();
             let size = try_number!(try_child!(elem, "filesize"));
-            let byte_runs = try!(try_child!(elem, "byte_runs").children.iter()
+            let byte_runs = try_child!(elem, "byte_runs").children.iter()
                 .map(|x| -> Result<ByteRun, ReportXmlError> {
                     Ok(ByteRun {
                         file_offset: try_attr_number!(x, "offset"),
                         disk_pos: try_attr_number!(x, "img_offset"),
                         len: try_attr_number!(x, "len"),
                     })
-                }).collect::<Result<Vec<ByteRun>, ReportXmlError>>());
-            let byte_runs_ref = try!(ByteRunsRef::new(size, byte_runs)
-                .map_err(|e| ReportXmlError::BadByteRunsRef(name.clone(), e))
-            );
+                }).collect::<Result<Vec<ByteRun>, ReportXmlError>>()?;
+            let byte_runs_ref = ByteRunsRef::new(size, byte_runs)
+                .map_err(|e| ReportXmlError::BadByteRunsRef(name.clone(), e))?;
             Ok((name, byte_runs_ref))
         }
         Some(inner(elem))
