@@ -45,16 +45,16 @@ impl<R: Read+Seek, D: DescRead> Read for ByteRunsReader<R, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefPos};
+    use super::super::byte_runs::{ByteRun, FileDescription, FileDescriptionPos};
 
     #[test]
     fn test_byte_runs_reader_easy() {
-        let br = ByteRunsRef::new(18, vec![
+        let br = FileDescription::new(18, vec![
             ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
             ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
             ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
         ]).unwrap();
-        let brf = ByteRunsRefPos::from(&br);
+        let brf = FileDescriptionPos::from(&br);
         let reader = io::Cursor::new((0..26).collect::<Vec<u8>>());
         let mut brr = ByteRunsReader {
             describer: brf,
@@ -67,12 +67,12 @@ mod tests {
 
     #[test]
     fn test_byte_runs_reader_small_read() {
-        let br = ByteRunsRef::new(18, vec![
+        let br = FileDescription::new(18, vec![
             ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
             ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
             ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
         ]).unwrap();
-        let brf = ByteRunsRefPos::from(&br);
+        let brf = FileDescriptionPos::from(&br);
         let reader = io::Cursor::new((0..26).collect::<Vec<u8>>());
         let mut brr = ByteRunsReader {
             describer: brf,
@@ -111,12 +111,12 @@ mod tests {
             }
         }
 
-        let br = ByteRunsRef::new(18, vec![
+        let br = FileDescription::new(18, vec![
             ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
             ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
             ByteRun { file_offset: 12, disk_pos: 20, len: 6 },
         ]).unwrap();
-        let brf = ByteRunsRefPos::from(&br);
+        let brf = FileDescriptionPos::from(&br);
         let reader = LameCursor::new((0..26).collect::<Vec<u8>>());
         let mut brr = ByteRunsReader {
             describer: brf,

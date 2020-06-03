@@ -34,39 +34,39 @@ pub trait Desc<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ByteRunsRef {
+pub struct FileDescription {
     runs: Box<[ByteRun]>,
     size: u64,
 }
 
 #[derive(Debug)]
-pub struct ByteRunsRefPos<'a> {
-    _ref: &'a ByteRunsRef,
+pub struct FileDescriptionPos<'a> {
+    _ref: &'a FileDescription,
     pos: u64,
     cur_run: usize,
     offset_in_run: u64,
 }
 
 #[derive(Error, Debug)]
-pub enum ByteRunsRefError {
-    #[error("Error constructing ByteRunsRef: {0} and {1} are overlapping")]
+pub enum FileDescriptionError {
+    #[error("Error constructing FileDescription: {0} and {1} are overlapping")]
     Overlap(ByteRun, ByteRun),
-    #[error("Error constructing ByteRunsRef: Gap between {0} and {1}")]
+    #[error("Error constructing FileDescription: Gap between {0} and {1}")]
     Gap(ByteRun, ByteRun),
-    #[error("Error constructing ByteRunsRef: Gap between beginning and {0}")]
+    #[error("Error constructing FileDescription: Gap between beginning and {0}")]
     PreGap(ByteRun),
-    #[error("Error constructing ByteRunsRef: No ByteRuns given")]
+    #[error("Error constructing FileDescription: No ByteRuns given")]
     Empty,
-    #[error("Error constructing ByteRunsRef: {0} is already past given size {1}")]
+    #[error("Error constructing FileDescription: {0} is already past given size {1}")]
     Trailing(ByteRun, u64),
-    #[error("Error constructing ByteRunsRef: Should be of size {0}, but only size {1} is covered")]
+    #[error("Error constructing FileDescription: Should be of size {0}, but only size {1} is covered")]
     Missing(u64, u64)
 }
 
-impl ByteRunsRef {
-    pub fn new<T: IntoIterator<Item=ByteRun>>(size: u64, runs: T) -> Result<Self, ByteRunsRefError> {
+impl FileDescription {
+    pub fn new<T: IntoIterator<Item=ByteRun>>(size: u64, runs: T) -> Result<Self, FileDescriptionError> {
         let mut runs: Vec<ByteRun> = runs.into_iter().collect();
-        if runs.len() == 0 { return Err(ByteRunsRefError::Empty); }
+        if runs.len() == 0 { return Err(FileDescriptionError::Empty); }
         runs.sort_unstable();
         let runs = runs;
 
@@ -74,34 +74,34 @@ impl ByteRunsRef {
         let mut it = runs.iter();
         let mut br = it.next().unwrap();
         // First check the first ByteRun starts at 0
-        if br.file_offset != 0 { return Err(ByteRunsRefError::PreGap(*br)); }
+        if br.file_offset != 0 { return Err(FileDescriptionError::PreGap(*br)); }
         off += br.len;
         // Then check all the following ByteRun-s come one after another
         for br2 in it {
-            if off > size { return Err(ByteRunsRefError::Trailing(*br2, size)); }
-            if br2.file_offset > off { return Err(ByteRunsRefError::Gap(*br, *br2)); }
-            else if br2.file_offset < off { return Err(ByteRunsRefError::Overlap(*br, *br2)); }
+            if off > size { return Err(FileDescriptionError::Trailing(*br2, size)); }
+            if br2.file_offset > off { return Err(FileDescriptionError::Gap(*br, *br2)); }
+            else if br2.file_offset < off { return Err(FileDescriptionError::Overlap(*br, *br2)); }
             br = br2;
             off += br.len;
         }
 
-        if size > off { return Err(ByteRunsRefError::Missing(size, off)); }
+        if size > off { return Err(FileDescriptionError::Missing(size, off)); }
         // The last block sometimes needs to be trimmed
         let mut runs = runs;
         runs.last_mut().unwrap().len -= off - size;
-        Ok(ByteRunsRef {
+        Ok(FileDescription {
             runs: runs.into_boxed_slice(),
             size: size,
         })
     }
 }
 
-impl<'a> Desc<'a> for ByteRunsRef {
-    type DescReader = ByteRunsRefPos<'a>;
+impl<'a> Desc<'a> for FileDescription {
+    type DescReader = FileDescriptionPos<'a>;
 
-    fn at_pos(&'a self, pos: u64) -> ByteRunsRefPos<'a> {
+    fn at_pos(&'a self, pos: u64) -> FileDescriptionPos<'a> {
         if pos > self.size {
-            ByteRunsRefPos {
+            FileDescriptionPos {
                 _ref: &self,
                 pos,
                 cur_run: self.runs.len(),
@@ -113,7 +113,7 @@ impl<'a> Desc<'a> for ByteRunsRef {
                     Err(x) => x-1,  // We could be inserted after this slice, which
                                     // means we're somewhere within it.
                 };
-            ByteRunsRefPos {
+            FileDescriptionPos {
                 _ref: &self,
                 pos,
                 cur_run,
@@ -123,13 +123,13 @@ impl<'a> Desc<'a> for ByteRunsRef {
     }
 }
 
-impl<'a> From<&'a ByteRunsRef> for ByteRunsRefPos<'a> {
-    fn from(_ref: &ByteRunsRef) -> ByteRunsRefPos<'_> {
+impl<'a> From<&'a FileDescription> for FileDescriptionPos<'a> {
+    fn from(_ref: &FileDescription) -> FileDescriptionPos<'_> {
         _ref.at_pos(0)
     }
 }
 
-impl<'a> DescRead for ByteRunsRefPos<'a> {
+impl<'a> DescRead for FileDescriptionPos<'a> {
     fn desc_read(&mut self) -> ByteRun {
         if self.cur_run != self._ref.runs.len() {
             ByteRun {
@@ -162,7 +162,7 @@ impl<'a> DescRead for ByteRunsRefPos<'a> {
     }
 }
 
-impl<'a> Seek for ByteRunsRefPos<'a> {
+impl<'a> Seek for FileDescriptionPos<'a> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         let (base_pos, offset) = match pos {
             SeekFrom::Start(x) => { mem::swap(self, &mut self._ref.at_pos(x)); return Ok(x); }
@@ -183,7 +183,7 @@ impl<'a> Seek for ByteRunsRefPos<'a> {
 
 #[test]
 fn test_byte_runs_ref_ctor() {
-    let br = ByteRunsRef::new(123, vec![
+    let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
@@ -196,23 +196,23 @@ fn test_byte_runs_ref_ctor() {
 
 #[test]
 fn test_byte_runs_ref_ctor_integrity() {
-    if let Err(ByteRunsRefError::Empty) = ByteRunsRef::new(123, vec![
+    if let Err(FileDescriptionError::Empty) = FileDescription::new(123, vec![
     ]) {
     } else { panic!(); }
-    if let Err(ByteRunsRefError::PreGap(y)) = ByteRunsRef::new(123, vec![
+    if let Err(FileDescriptionError::PreGap(y)) = FileDescription::new(123, vec![
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
     ]) {
         assert_eq!(y, ByteRun { file_offset: 50, disk_pos: 8000, len: 50});
     } else { panic!(); }
-    if let Err(ByteRunsRefError::Gap(x, y)) = ByteRunsRef::new(123, vec![
+    if let Err(FileDescriptionError::Gap(x, y)) = FileDescription::new(123, vec![
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
     ]) {
         assert_eq!(x, ByteRun { file_offset: 0, disk_pos: 16000, len: 50});
         assert_eq!(y, ByteRun { file_offset: 100, disk_pos: 2000, len: 50});
     } else { panic!(); }
-    if let Err(ByteRunsRefError::Overlap(x, y)) = ByteRunsRef::new(123, vec![
+    if let Err(FileDescriptionError::Overlap(x, y)) = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 60 },
@@ -224,12 +224,12 @@ fn test_byte_runs_ref_ctor_integrity() {
 
 #[test]
 fn test_byte_runs_ref_pos_seek() {
-    let br = ByteRunsRef::new(123, vec![
+    let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },
     ]).unwrap();
-    let mut brf = ByteRunsRefPos::from(&br);
+    let mut brf = FileDescriptionPos::from(&br);
     assert_eq!(brf.seek(SeekFrom::Start(3)).unwrap(), 3);
     assert_eq!(brf.seek(SeekFrom::Start(6)).unwrap(), 6);
     assert_eq!(brf.seek(SeekFrom::Current(0x7ffffffffffffff0)).unwrap(), 0x7ffffffffffffff6);
@@ -243,7 +243,7 @@ fn test_byte_runs_ref_pos_seek() {
 
 #[test]
 fn test_byte_runs_ref_at_pos() {
-    let br = ByteRunsRef::new(123, vec![
+    let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
         ByteRun { file_offset: 0, disk_pos: 16000, len: 50 },

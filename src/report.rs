@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use xmltree::{Element, ParseError};
 
-use super::byte_runs::{ByteRun, ByteRunsRef, ByteRunsRefError};
+use super::byte_runs::{ByteRun, FileDescription, FileDescriptionError};
 
 pub struct ReportXml {
     image_filename: String,
@@ -35,8 +35,8 @@ pub enum ReportXmlError {
     MalformedText { field_name: String, #[source] source: num::ParseIntError },
     #[error("Malformed attr {attr_name} in field {field_name} in xml, parse error: {source}")]
     MalformedAttr { attr_name: &'static str, field_name: String, #[source] source: num::ParseIntError },
-    #[error("File {file_name} has a bad ByteRunsRef: {source}")]
-    BadByteRunsRef { file_name: String, #[source] source: ByteRunsRefError },
+    #[error("File {file_name} has a bad FileDescription: {source}")]
+    BadFileDescription { file_name: String, #[source] source: FileDescriptionError },
 }
 
 fn get_child<'a>(elem: &'a Element, name: &'static str) -> Result<&'a Element> {
@@ -66,7 +66,7 @@ fn assert_name<'a>(elem: &'a Element, name: &'static str) -> Result<()> {
 }
 
 
-fn to_byte_runs_ref(elem: Element) -> Result<(String, ByteRunsRef)> {
+fn to_byte_runs_ref(elem: Element) -> Result<(String, FileDescription)> {
     let name = get_text(get_child(&elem, "filename")?)?.clone();
     let size = get_number(get_child(&elem, "filesize")?)?;
     let byte_runs = get_child(&elem, "byte_runs")?.children.iter()
@@ -77,8 +77,8 @@ fn to_byte_runs_ref(elem: Element) -> Result<(String, ByteRunsRef)> {
             let len = get_attr_number(x, "len")?;
             Ok(ByteRun { file_offset, disk_pos, len })
         }).collect::<Result<Vec<ByteRun>>>()?;
-    let byte_runs_ref = ByteRunsRef::new(size, byte_runs)
-        .map_err(|e| ReportXmlError::BadByteRunsRef { file_name: name.clone(), source: e })?;
+    let byte_runs_ref = FileDescription::new(size, byte_runs)
+        .map_err(|e| ReportXmlError::BadFileDescription { file_name: name.clone(), source: e })?;
     Ok((name, byte_runs_ref))
 }
 
@@ -100,7 +100,7 @@ impl ReportXml {
 }
 
 impl Iterator for ReportXml {
-    type Item = Result<(String, ByteRunsRef)>;
+    type Item = Result<(String, FileDescription)>;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.find(|ref x| x.name == "fileobject").map(to_byte_runs_ref)
     }
@@ -373,9 +373,9 @@ fn test_report_xml_iter_errors() {
         assert_eq!(*s, "byte_runs");
     });
     let e = rx.next().unwrap().err().unwrap();
-    assert_let!(ReportXmlError::BadByteRunsRef { file_name: x, source: e } = e, {
+    assert_let!(ReportXmlError::BadFileDescription { file_name: x, source: e } = e, {
         assert_eq!(x, "f3");
-        assert_let!(ByteRunsRefError::Empty = e);
+        assert_let!(FileDescriptionError::Empty = e);
     });
     let e = rx.next().unwrap().err().unwrap();
     assert_let!(ReportXmlError::BadChildName { expected_name: ref exp, field_name: ref field } = e, {
