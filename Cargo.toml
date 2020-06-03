@@ -10,9 +10,10 @@ fuse_fl = { git = "https://github.com/amosonn/rust_fuse_fl", optional = true }
 serde = { version = "0.9.13", optional = true }
 serde_derive = { version = "0.9.13", optional = true }
 libc = { version = "0.2", optional = true }
+time = { version = "0.1", optional = true }
 
 [features]
-filesystem = ["fuse_fl", "serde", "serde_derive", "libc"]
+filesystem = ["fuse_fl", "serde", "serde_derive", "libc", "time"]
 
 [[bin]]
 name = "photorecfs"
