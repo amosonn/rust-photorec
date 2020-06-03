@@ -59,26 +59,37 @@ pub enum ByteRunsRefError {
     PreGap(ByteRun),
     #[error("Error constructing ByteRunsRef: No ByteRuns given")]
     Empty,
+    #[error("Error constructing ByteRunsRef: {0} is already past given size {1}")]
+    Trailing(ByteRun, u64),
+    #[error("Error constructing ByteRunsRef: Should be of size {0}, but only size {1} is covered")]
+    Missing(u64, u64)
 }
 
 impl ByteRunsRef {
-    pub fn new(size: u64, mut runs: Vec<ByteRun>) -> Result<Self, ByteRunsRefError> {
+    pub fn new<T: IntoIterator<Item=ByteRun>>(size: u64, runs: T) -> Result<Self, ByteRunsRefError> {
+        let mut runs: Vec<ByteRun> = runs.into_iter().collect();
         if runs.len() == 0 { return Err(ByteRunsRefError::Empty); }
-        runs.sort();
+        runs.sort_unstable();
+        let runs = runs;
+
         let mut off = 0;
-        {
-            let mut it = runs.iter();
-            let mut br = it.next().unwrap();
-            if br.file_offset != 0 { return Err(ByteRunsRefError::PreGap(*br)); }
+        let mut it = runs.iter();
+        let mut br = it.next().unwrap();
+        // First check the first ByteRun starts at 0
+        if br.file_offset != 0 { return Err(ByteRunsRefError::PreGap(*br)); }
+        off += br.len;
+        // Then check all the following ByteRun-s come one after another
+        for br2 in it {
+            if off > size { return Err(ByteRunsRefError::Trailing(*br2, size)); }
+            if br2.file_offset > off { return Err(ByteRunsRefError::Gap(*br, *br2)); }
+            else if br2.file_offset < off { return Err(ByteRunsRefError::Overlap(*br, *br2)); }
+            br = br2;
             off += br.len;
-            for br2 in it {
-                if br2.file_offset > off { return Err(ByteRunsRefError::Gap(*br, *br2)); }
-                else if br2.file_offset < off { return Err(ByteRunsRefError::Overlap(*br, *br2)); }
-                br = br2;
-                off += br.len;
-            }
         }
-        // We could do this inside, but then the entire iter has to be mut...
+
+        if size > off { return Err(ByteRunsRefError::Missing(size, off)); }
+        // The last block sometimes needs to be trimmed
+        let mut runs = runs;
         runs.last_mut().unwrap().len -= off - size;
         Ok(ByteRunsRef {
             runs: runs.into_boxed_slice(),
