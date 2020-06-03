@@ -18,7 +18,7 @@ pub struct ByteRun {
 }
 
 impl fmt::Display for ByteRun {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(file_offset: {}, disk_pos: {}, len: {})", self.file_offset, self.disk_pos, self.len)
     }
 }
@@ -115,7 +115,7 @@ impl<'a> Desc<'a> for ByteRunsRef {
 }
 
 impl<'a> From<&'a ByteRunsRef> for ByteRunsRefPos<'a> {
-    fn from(_ref: &ByteRunsRef) -> ByteRunsRefPos {
+    fn from(_ref: &ByteRunsRef) -> ByteRunsRefPos<'_> {
         _ref.at_pos(0)
     }
 }
