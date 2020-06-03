@@ -10,7 +10,6 @@ use std::mem;
 use thiserror::Error;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-#[cfg_attr(feature = "filesystem", derive(Serialize, Deserialize))]
 pub struct ByteRun {
     pub file_offset: u64,
     pub disk_pos: u64,
@@ -35,7 +34,6 @@ pub trait Desc<'a> {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "filesystem", derive(Serialize, Deserialize))]
 pub struct ByteRunsRef {
     runs: Box<[ByteRun]>,
     size: u64,

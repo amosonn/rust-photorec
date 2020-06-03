@@ -8,16 +8,7 @@ edition = "2018"
 [dependencies]
 xmltree = "0.3.2"
 thiserror = "1.0.19"
-fuse_fl = { git = "https://github.com/amosonn/rust_fuse_fl", optional = true }
-serde = { version = "0.9.13", optional = true }
-serde_derive = { version = "0.9.13", optional = true }
-libc = { version = "0.2", optional = true }
-time = { version = "0.1", optional = true }
-
-[features]
-filesystem = ["fuse_fl", "serde", "serde_derive", "libc", "time"]
 
 [[bin]]
-name = "photorecfs"
-path = "src/bin/photorecfs.rs"
-required-features = ["filesystem"]
+name = "photorec-merge"
+path = "src/bin/photorec-merge.rs"
