@@ -3,10 +3,10 @@
 // in it, including implementation for "opening" a file so.
 //
 use std::io::Read;
-use std::fmt;
-use std::error::Error;
 use std::vec;
 use std::num;
+
+use thiserror::Error;
 
 use xmltree::{Element, ParseError};
 
@@ -18,62 +18,22 @@ pub struct ReportXml {
 }
 
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ReportXmlError {
-    Parse(ParseError),
+    #[error("Error parsing: {0}")]
+    Parse(#[from] ParseError),
+    #[error("Missing field {0} in xml")]
     MissingField(String),
+    #[error("Missing text in field {0} in xml")]
     MissingText(String),
+    #[error("Missing attr {0} in field <missing> in xml")]
     MissingAttr(String),
-    MalformedText(String, num::ParseIntError),
-    MalformedAttr(String, num::ParseIntError),
-    BadByteRunsRef(String, ByteRunsRefError),
-}
-
-impl fmt::Display for ReportXmlError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ReportXmlError::Parse(ref x) => write!(f, "Error parsing: {}", x),
-            ReportXmlError::MissingField(ref x) => write!(f, "Missing field {} in xml", x),
-            ReportXmlError::MissingText(ref x) => write!(f, "Missing text in field {} in xml", x),
-            ReportXmlError::MissingAttr(ref x) => write!(f, "Missing attr {} in field in xml", x),
-            ReportXmlError::MalformedText(ref x, ref e) => 
-                write!(f, "Malformed text in field {} in xml, parse error: {}", x, e),
-            ReportXmlError::MalformedAttr(ref x, ref e) => 
-                write!(f, "Malformed attr {} in field in xml, parse error: {}", x, e),
-            ReportXmlError::BadByteRunsRef(ref x, ref e) => 
-                write!(f, "File {} has a bad ByteRunsRef: {}", x, e),
-        }
-    }
-}
-
-impl Error for ReportXmlError {
-    fn description(&self) -> &str {
-        match *self {
-            ReportXmlError::Parse(ref x) => x.description(),
-            ReportXmlError::MissingField(_) => "Missing field in xml",
-            ReportXmlError::MissingText(_) => "Missing text in field in xml",
-            ReportXmlError::MalformedText(_, _) => "Malformed text in field in xml",
-            ReportXmlError::MissingAttr(_) => "Missing attr in field in xml",
-            ReportXmlError::MalformedAttr(_, _) => "Malformed attr in field in xml",
-            ReportXmlError::BadByteRunsRef(_, ref x) => x.description(),
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        match *self {
-            ReportXmlError::Parse(ref x) => Some(x),
-            ReportXmlError::MissingField(_) => None,
-            ReportXmlError::MissingText(_) => None,
-            ReportXmlError::MalformedText(_, ref x) => Some(x),
-            ReportXmlError::MissingAttr(_) => None,
-            ReportXmlError::MalformedAttr(_, ref x) => Some(x),
-            ReportXmlError::BadByteRunsRef(_, ref x) => Some(x),
-        }
-    }
-}
-
-impl From<ParseError> for ReportXmlError {
-    fn from(pe: ParseError) -> Self { ReportXmlError::Parse(pe) }
+    #[error("Malformed text in field {0} in xml, parse error: {1}")]
+    MalformedText(String, #[source] num::ParseIntError),
+    #[error("Malformed attr {0} in field <missing> in xml, parse error: {1}")]
+    MalformedAttr(String, #[source] num::ParseIntError),
+    #[error("File {0} has a bad ByteRunsRef: {1}")]
+    BadByteRunsRef(String, #[source] ByteRunsRefError),
 }
 
 

@@ -6,6 +6,7 @@ description = "Rust interface for using photorec report.xml files."
 
 [dependencies]
 xmltree = "0.3.2"
+thiserror = "1.0.19"
 fuse_fl = { git = "https://github.com/amosonn/rust_fuse_fl", optional = true }
 serde = { version = "0.9.13", optional = true }
 serde_derive = { version = "0.9.13", optional = true }

@@ -5,8 +5,9 @@
 use std::io::{Seek, SeekFrom};
 use std::io;
 use std::fmt;
-use std::error::Error;
 use std::mem;
+
+use thiserror::Error;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 #[cfg_attr(feature = "filesystem", derive(Serialize, Deserialize))]
@@ -48,34 +49,16 @@ pub struct ByteRunsRefPos<'a> {
     offset_in_run: u64,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ByteRunsRefError {
+    #[error("Error constructing ByteRunsRef: {0} and {1} are overlapping")]
     Overlap(ByteRun, ByteRun),
+    #[error("Error constructing ByteRunsRef: Gap between {0} and {1}")]
     Gap(ByteRun, ByteRun),
+    #[error("Error constructing ByteRunsRef: Gap between beginning and {0}")]
     PreGap(ByteRun),
+    #[error("Error constructing ByteRunsRef: No ByteRuns given")]
     Empty,
-}
-
-impl fmt::Display for ByteRunsRefError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ByteRunsRefError::Overlap(x, y) => write!(f, "Error constructing ByteRunsRef: {} and {} are overlapping", x, y),
-            ByteRunsRefError::Gap(x, y) => write!(f, "Error constructing ByteRunsRef: Gap between {} and {}", x, y),
-            ByteRunsRefError::PreGap(y) => write!(f, "Error constructing ByteRunsRef: Gap between beginning and {}", y),
-            ByteRunsRefError::Empty => write!(f, "Error constructing ByteRunsRef: No ByteRuns given"),
-        }
-    }
-}
-
-impl Error for ByteRunsRefError {
-    fn description(&self) -> &str {
-        match *self {
-            ByteRunsRefError::Overlap(_, _) => "Overlapping ByteRuns.",
-            ByteRunsRefError::Gap(_, _) => "Gap between ByteRuns.",
-            ByteRunsRefError::PreGap(_) => "Gap before ByteRuns.",
-            ByteRunsRefError::Empty => "No ByteRuns.",
-        }
-    }
 }
 
 impl ByteRunsRef {

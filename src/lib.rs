@@ -1,5 +1,6 @@
 
 extern crate xmltree;
+extern crate thiserror;
 
 #[cfg(feature = "filesystem")]
 extern crate fuse_fl;
