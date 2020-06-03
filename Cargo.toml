@@ -3,6 +3,7 @@ name = "photorec"
 version = "0.1.0"
 authors = ["Amos Onn <amosonn@gmail.com>"]
 description = "Rust interface for using photorec report.xml files."
+edition = "2018"
 
 [dependencies]
 xmltree = "0.3.2"
