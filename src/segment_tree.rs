@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::BTreeMap;
 use std::mem;
-use core::ops::Range;
+use core::ops::RangeInclusive;
 
 use Entry::*;
 
@@ -15,7 +15,8 @@ pub struct Segment {
 pub struct SegmentTree<T>(BTreeMap<u64, SegmentValue<T>>);
 
 impl Segment {
-    fn get_range(&self) -> Range<u64> { self.start..self.end }
+    pub fn new(start: u64, end: u64) -> Segment { assert!(start < end); Segment { start, end } }
+    fn get_range(&self) -> RangeInclusive<u64> { self.start..=self.end }
 }
 
 /// The value for a SegmentTree<T>
@@ -296,15 +297,38 @@ impl<T> SegmentTree<T> {
             Some((start, SegmentValue::StartEnd(_))) if start == &seg.start => {
                 match iter.next() {
                     Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => Get::Exact(v),
+                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => {
+                        match iter.next() {
+                            None => Get::Exact(v),
+                            _ => Get::Intersect,
+                        }
+                    }
                     _ => Get::Intersect,
                 }
             },
+            Some((start, SegmentValue::End(_))) if start == &seg.start => {
+                match iter.next() {
+                    None => Get::Doesnt,
+                    Some((end, SegmentValue::Start)) if end == &seg.end => {
+                        match iter.next() {
+                            None => Get::Doesnt,
+                            _ => Get::Intersect,
+                        }
+                    }
+                    _ => Get::Intersect,
+                }
+            }
+            Some((end, SegmentValue::Start)) if end == &seg.end => {
+                match iter.next() {
+                    None => Get::Doesnt,
+                    _ => Get::Intersect,
+                }
+            }
             Some(_) => Get::Intersect,
         }
     }
 
-    pub fn get_segment_mut(&mut self, seg: Segment) -> GetMut<T> {
+    pub fn get_mut_segment(&mut self, seg: Segment) -> GetMut<T> {
         let mut iter = self.0.range_mut(seg.get_range());
         match iter.next() {
             None => GetMut::Doesnt,
@@ -312,10 +336,33 @@ impl<T> SegmentTree<T> {
             Some((start, SegmentValue::StartEnd(_))) if start == &seg.start => {
                 match iter.next() {
                     Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => GetMut::Exact(v),
+                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => {
+                        match iter.next() {
+                            None => GetMut::Exact(v),
+                            _ => GetMut::Intersect,
+                        }
+                    }
                     _ => GetMut::Intersect,
                 }
             },
+            Some((start, SegmentValue::End(_))) if start == &seg.start => {
+                match iter.next() {
+                    None => GetMut::Doesnt,
+                    Some((end, SegmentValue::Start)) if end == &seg.end => {
+                        match iter.next() {
+                            None => GetMut::Doesnt,
+                            _ => GetMut::Intersect,
+                        }
+                    }
+                    _ => GetMut::Intersect,
+                }
+            }
+            Some((end, SegmentValue::Start)) if end == &seg.end => {
+                match iter.next() {
+                    None => GetMut::Doesnt,
+                    _ => GetMut::Intersect,
+                }
+            }
             Some(_) => GetMut::Intersect,
         }
     }
@@ -338,8 +385,54 @@ impl<T> SegmentTree<T> {
                 entry.insert(value);
                 Insert::Inserted
             },
-            Some(Entry::Occupied(entry)) => Insert::Old(entry.remove()),
+            Some(Entry::Occupied(mut entry)) => Insert::Old(entry.insert(value)),
             None => Insert::Intersect(value),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Segment, SegmentTree, Get, GetMut, Insert, Contains, Entry};
+    #[test]
+    fn smoke() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct X(u64);
+
+        let mut st = SegmentTree::new();
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Doesnt);
+        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), GetMut::Doesnt);
+        assert_eq!(st.contains_segment(Segment::new(1, 3)), Contains::Doesnt);
+        assert_eq!(st.insert_segment(Segment::new(1, 3), X(0)), Insert::Inserted);
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Exact(&X(0)));
+        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), GetMut::Exact(&mut X(0)));
+        assert_eq!(st.contains_segment(Segment::new(1, 3)), Contains::Exact);
+        assert_eq!(st.contains_segment(Segment::new(2, 3)), Contains::Intersect);
+        assert_eq!(st.contains_segment(Segment::new(2, 4)), Contains::Intersect);
+        assert_eq!(st.contains_segment(Segment::new(0, 2)), Contains::Intersect);
+        assert_eq!(st.contains_segment(Segment::new(0, 4)), Contains::Intersect);
+        assert_eq!(st.contains_segment(Segment::new(3, 6)), Contains::Doesnt);
+        assert_eq!(st.contains_segment(Segment::new(0, 1)), Contains::Doesnt);
+        assert_eq!(st.insert_segment(Segment::new(7, 9), X(1)), Insert::Inserted);
+        assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Insert::Intersect(X(2)));
+        assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Insert::Old(X(0)));
+        assert_eq!(st.insert_segment(Segment::new(3, 4), X(4)), Insert::Inserted);
+        assert_eq!(st.contains_segment(Segment::new(4, 7)), Contains::Doesnt);
+        assert_let!(Some(Entry::Vacant(entry)) = st.entry_segment(Segment::new(5, 7)), {
+            assert_eq!(entry.insert(X(5)), &mut X(5));
+        });
+        assert_eq!(st.insert_segment(Segment::new(4, 5), X(6)), Insert::Inserted);
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Exact(&X(3)));
+        assert_eq!(st.get_segment(Segment::new(3, 4)), Get::Exact(&X(4)));
+        assert_eq!(st.get_segment(Segment::new(4, 5)), Get::Exact(&X(6)));
+        assert_eq!(st.get_segment(Segment::new(5, 7)), Get::Exact(&X(5)));
+        assert_let!(Some(Entry::Occupied(entry)) = st.entry_segment(Segment::new(4, 5)), {
+            assert_eq!(entry.remove(), X(6));
+        });
+        assert_eq!(st.get_segment(Segment::new(4, 5)), Get::Doesnt);
+        assert_let!(Some(Entry::Occupied(mut entry)) = st.entry_segment(Segment::new(5, 7)), {
+            assert_eq!(entry.insert(X(7)), X(5));
+        });
+        assert_let!(None = st.entry_segment(Segment::new(0, 9)));
     }
 }
