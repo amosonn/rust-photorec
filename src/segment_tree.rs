@@ -11,6 +11,7 @@ pub struct Segment {
     pub end: u64,
 }
 
+#[derive(Clone, Debug)]
 pub struct SegmentTree<T>(BTreeMap<u64, SegmentValue<T>>);
 
 impl Segment {
@@ -18,6 +19,7 @@ impl Segment {
 }
 
 /// The value for a SegmentTree<T>
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum SegmentValue<T> {
     /// This is the start of a segment
     Start,
@@ -43,6 +45,7 @@ impl<T> SegmentValue<T> {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum Get<'a, T> {
     /// The exact segment is in the tree, with this value
     Exact(&'a T),
@@ -52,6 +55,7 @@ pub enum Get<'a, T> {
     Doesnt,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum GetMut<'a, T> {
     /// The exact segment is in the tree, with this value
     Exact(&'a mut T),
@@ -61,6 +65,7 @@ pub enum GetMut<'a, T> {
     Doesnt,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum Insert<T> {
     /// The exact segment is in the tree, this was the old value
     Old(T),
@@ -70,6 +75,7 @@ pub enum Insert<T> {
     Inserted,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Contains {
     /// The exact segment is in the tree
     Exact,
@@ -160,17 +166,19 @@ fn add_end<'a, V>(entry: InnerEntry<'a, V>, v: V) -> &'a mut V {
     }.get_mut().unwrap()
 }
 
-
+#[derive(Debug)]
 pub enum Entry<'a, V> {
     Vacant(VacantEntry<'a, V>),
     Occupied(OccupiedEntry<'a, V>),
 }
 
+#[derive(Debug)]
 pub struct VacantEntry<'a, V> {
     tree: &'a mut SegmentTree<V>,
     seg: Segment,
 }
 
+#[derive(Debug)]
 pub struct OccupiedEntry<'a, V> {
     tree: &'a mut SegmentTree<V>,
     seg: Segment,
