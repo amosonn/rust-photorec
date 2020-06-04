@@ -12,6 +12,7 @@ use xmltree::{Element, ParseError};
 
 use super::byte_runs::{ByteRun, FileDescription, FileDescriptionError};
 
+#[derive(Debug)]
 pub struct ReportXml {
     image_filename: String,
     iter: vec::IntoIter<Element>,

@@ -1,3 +1,4 @@
+#[cfg(test)]
 #[macro_use]
 mod tests;
 
@@ -10,3 +11,7 @@ pub use crate::byte_runs::{ByteRun, FileDescription, FileDescriptionPos, FileDes
 pub use crate::reader::ByteRunsReader;
 pub use crate::report::{ReportXml, ReportXmlError};
 pub use crate::segment_tree::{Segment, SegmentTree, Entry, VacantEntry, OccupiedEntry, Get, GetMut, Insert, Contains};
+
+#[cfg(test)]
+#[macro_use]
+extern crate quote;
