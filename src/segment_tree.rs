@@ -353,6 +353,13 @@ impl<T> SegmentTree<T> {
             None => Insert::Intersect(value),
         }
     }
+
+    pub fn remove_segment(&mut self, seg: Segment) -> Option<T> {
+        match self.entry_segment(seg) {
+            Some(Entry::Vacant(_)) | None => None,
+            Some(Entry::Occupied(entry)) => Some(entry.remove()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -398,5 +405,8 @@ mod tests {
             assert_eq!(entry.insert(X(7)), X(5));
         });
         assert_let!(None = st.entry_segment(Segment::new(0, 9)));
+        assert_eq!(st.remove_segment(Segment::new(0, 9)), None);
+        assert_eq!(st.remove_segment(Segment::new(4, 5)), None);
+        assert_eq!(st.remove_segment(Segment::new(5, 7)), Some(X(7)));
     }
 }
