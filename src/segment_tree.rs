@@ -276,12 +276,43 @@ impl<'a, V> OccupiedEntry<'a, V> {
     }
 }
 
-impl<'a, T> From<Get<'a, T>> for Contains {
-    fn from(g: Get<'a, T>) -> Self {
-        match g {
-            Get::Exact(_) => Contains::Exact,
-            Get::Intersect => Contains::Intersect,
-            Get::Doesnt => Contains::Doesnt,
+macro_rules! impl_segment {
+    { $iter:expr, $seg:expr, $doesnt:path, $intersect:path, $exact:path } => {
+        let mut iter = $iter;
+        match iter.next() {
+            None => $doesnt,
+            Some((start, SegmentValue::Start)) |
+            Some((start, SegmentValue::StartEnd(_))) if start == &$seg.start => {
+                match iter.next() {
+                    Some((end, SegmentValue::End(v))) |
+                    Some((end, SegmentValue::StartEnd(v))) if end == &$seg.end => {
+                        match iter.next() {
+                            None => $exact(v),
+                            _ => $intersect,
+                        }
+                    }
+                    _ => $intersect,
+                }
+            },
+            Some((start, SegmentValue::End(_))) if start == &$seg.start => {
+                match iter.next() {
+                    None => $doesnt,
+                    Some((end, SegmentValue::Start)) if end == &$seg.end => {
+                        match iter.next() {
+                            None => $doesnt,
+                            _ => $intersect,
+                        }
+                    }
+                    _ => $intersect,
+                }
+            }
+            Some((end, SegmentValue::Start)) if end == &$seg.end => {
+                match iter.next() {
+                    None => $doesnt,
+                    _ => $intersect,
+                }
+            }
+            Some(_) => $intersect,
         }
     }
 }
@@ -290,84 +321,17 @@ impl<T> SegmentTree<T> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
     pub fn get_segment(&self, seg: Segment) -> Get<T> {
-        let mut iter = self.0.range(seg.get_range());
-        match iter.next() {
-            None => Get::Doesnt,
-            Some((start, SegmentValue::Start)) |
-            Some((start, SegmentValue::StartEnd(_))) if start == &seg.start => {
-                match iter.next() {
-                    Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => {
-                        match iter.next() {
-                            None => Get::Exact(v),
-                            _ => Get::Intersect,
-                        }
-                    }
-                    _ => Get::Intersect,
-                }
-            },
-            Some((start, SegmentValue::End(_))) if start == &seg.start => {
-                match iter.next() {
-                    None => Get::Doesnt,
-                    Some((end, SegmentValue::Start)) if end == &seg.end => {
-                        match iter.next() {
-                            None => Get::Doesnt,
-                            _ => Get::Intersect,
-                        }
-                    }
-                    _ => Get::Intersect,
-                }
-            }
-            Some((end, SegmentValue::Start)) if end == &seg.end => {
-                match iter.next() {
-                    None => Get::Doesnt,
-                    _ => Get::Intersect,
-                }
-            }
-            Some(_) => Get::Intersect,
-        }
+        impl_segment! { self.0.range(seg.get_range()), seg, Get::Doesnt, Get::Intersect, Get::Exact }
     }
 
     pub fn get_mut_segment(&mut self, seg: Segment) -> GetMut<T> {
-        let mut iter = self.0.range_mut(seg.get_range());
-        match iter.next() {
-            None => GetMut::Doesnt,
-            Some((start, SegmentValue::Start)) |
-            Some((start, SegmentValue::StartEnd(_))) if start == &seg.start => {
-                match iter.next() {
-                    Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::StartEnd(v))) if end == &seg.end => {
-                        match iter.next() {
-                            None => GetMut::Exact(v),
-                            _ => GetMut::Intersect,
-                        }
-                    }
-                    _ => GetMut::Intersect,
-                }
-            },
-            Some((start, SegmentValue::End(_))) if start == &seg.start => {
-                match iter.next() {
-                    None => GetMut::Doesnt,
-                    Some((end, SegmentValue::Start)) if end == &seg.end => {
-                        match iter.next() {
-                            None => GetMut::Doesnt,
-                            _ => GetMut::Intersect,
-                        }
-                    }
-                    _ => GetMut::Intersect,
-                }
-            }
-            Some((end, SegmentValue::Start)) if end == &seg.end => {
-                match iter.next() {
-                    None => GetMut::Doesnt,
-                    _ => GetMut::Intersect,
-                }
-            }
-            Some(_) => GetMut::Intersect,
-        }
+        impl_segment! { self.0.range_mut(seg.get_range()), seg, GetMut::Doesnt, GetMut::Intersect, GetMut::Exact }
     }
 
-    pub fn contains_segment(&self, seg: Segment) -> Contains { self.get_segment(seg).into() }
+    pub fn contains_segment(&self, seg: Segment) -> Contains { 
+        let exact = |_| Contains::Exact;
+        impl_segment! { self.0.range(seg.get_range()), seg, Contains::Doesnt, Contains::Intersect, exact }
+    }
 
     /// Gets an Ok(Entry), Vacant or Occupied, if the tree doesn't contain any intersection with the
     /// segment or contains it exactly. Returns None otherwise.
