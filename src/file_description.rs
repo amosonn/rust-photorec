@@ -6,6 +6,7 @@ use std::io::{Seek, SeekFrom};
 use std::io;
 use std::fmt;
 use std::mem;
+use std::iter::IntoIterator;
 
 use thiserror::Error;
 
@@ -94,6 +95,16 @@ impl FileDescription {
             size: size,
         })
     }
+
+    pub fn size(&self) -> u64 { self.size }
+
+    pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter { (&self).into_iter() }
+}
+
+impl<'a> IntoIterator for &'a FileDescription {
+    type Item = &'a ByteRun;
+    type IntoIter = <&'a [ByteRun] as IntoIterator>::IntoIter;
+    fn into_iter(self) -> Self::IntoIter { self.runs.into_iter() }
 }
 
 impl<'a> Desc<'a> for FileDescription {
