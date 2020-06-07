@@ -2,12 +2,12 @@
 #[macro_use]
 mod tests;
 
-mod byte_runs;
+mod file_description;
 mod reader;
 mod report;
 mod segment_tree;
 
-pub use crate::byte_runs::{ByteRun, FileDescription, FileDescriptionPos, FileDescriptionError};
+pub use crate::file_description::{ByteRun, FileDescription, FileDescriptionPos, FileDescriptionError};
 pub use crate::reader::ByteRunsReader;
 pub use crate::report::{ReportXml, ReportXmlError};
 pub use crate::segment_tree::{Segment, SegmentTree, SegmentTreeError, Entry, VacantEntry, OccupiedEntry}; 

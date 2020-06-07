@@ -6,7 +6,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::io;
 use std::cmp::min;
 
-use super::byte_runs::DescRead;
+use super::file_description::DescRead;
 
 
 pub struct ByteRunsReader<R, D> {
@@ -45,10 +45,10 @@ impl<R: Read+Seek, D: DescRead> Read for ByteRunsReader<R, D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::byte_runs::{ByteRun, FileDescription, FileDescriptionPos};
+    use super::super::file_description::{ByteRun, FileDescription, FileDescriptionPos};
 
     #[test]
-    fn test_byte_runs_reader_easy() {
+    fn test_file_description_reader_easy() {
         let br = FileDescription::new(18, vec![
             ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
             ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
@@ -66,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn test_byte_runs_reader_small_read() {
+    fn test_file_description_reader_small_read() {
         let br = FileDescription::new(18, vec![
             ByteRun { file_offset: 0, disk_pos: 0, len: 6 },
             ByteRun { file_offset: 6, disk_pos: 10, len: 6 },
@@ -88,7 +88,7 @@ mod tests {
 
     
     #[test]
-    fn test_byte_runs_reader_hard() {
+    fn test_file_description_reader_hard() {
         struct LameCursor<T> {
             inner: io::Cursor<T>,
         };

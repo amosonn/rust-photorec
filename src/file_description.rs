@@ -182,7 +182,7 @@ impl<'a> Seek for FileDescriptionPos<'a> {
 }
 
 #[test]
-fn test_byte_runs_ref_ctor() {
+fn test_file_description_ref_ctor() {
     let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
@@ -195,7 +195,7 @@ fn test_byte_runs_ref_ctor() {
 }
 
 #[test]
-fn test_byte_runs_ref_ctor_integrity() {
+fn test_file_description_ref_ctor_integrity() {
     if let Err(FileDescriptionError::Empty) = FileDescription::new(123, vec![
     ]) {
     } else { panic!(); }
@@ -223,7 +223,7 @@ fn test_byte_runs_ref_ctor_integrity() {
 }
 
 #[test]
-fn test_byte_runs_ref_pos_seek() {
+fn test_file_description_ref_pos_seek() {
     let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
@@ -242,7 +242,7 @@ fn test_byte_runs_ref_pos_seek() {
 }
 
 #[test]
-fn test_byte_runs_ref_at_pos() {
+fn test_file_description_ref_at_pos() {
     let br = FileDescription::new(123, vec![
         ByteRun { file_offset: 50, disk_pos: 8000, len: 50 },
         ByteRun { file_offset: 100, disk_pos: 2000, len: 50 },
