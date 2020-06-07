@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::BTreeMap;
 use std::mem;
-use core::ops::RangeInclusive;
+use core::ops::RangeBounds;
 
 use thiserror::Error;
 
@@ -26,7 +26,7 @@ pub struct SegmentTree<T>(BTreeMap<u64, SegmentValue<T>>);
 
 impl Segment {
     pub fn new(start: u64, end: u64) -> Segment { assert!(start < end); Segment { start, end } }
-    fn get_range(&self) -> RangeInclusive<u64> { self.start..=self.end }
+    fn get_range(&self) -> impl RangeBounds<u64> { self.start..=self.end }
 }
 
 /// The value for a SegmentTree<T>
