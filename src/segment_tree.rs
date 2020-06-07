@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use std::mem;
 use core::ops::RangeInclusive;
 
+use thiserror::Error;
+
 use Entry::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
@@ -10,6 +12,14 @@ pub struct Segment {
     pub start: u64,
     pub end: u64,
 }
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum SegmentTreeError {
+    #[error("Requested segment intersects one in the tree")]
+    Intersect,
+}
+
+type Result<T> = std::result::Result<T, SegmentTreeError>;
 
 #[derive(Clone, Debug)]
 pub struct SegmentTree<T>(BTreeMap<u64, SegmentValue<T>>);
@@ -44,46 +54,6 @@ impl<T> SegmentValue<T> {
             SegmentValue::End(ref mut t) | SegmentValue::StartEnd(ref mut t) => Some(t)
         }
     }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum Get<'a, T> {
-    /// The exact segment is in the tree, with this value
-    Exact(&'a T),
-    /// This segment intersects one or more segments in the tree
-    Intersect,
-    /// This segment doesn't intersect any segment in the tree
-    Doesnt,
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum GetMut<'a, T> {
-    /// The exact segment is in the tree, with this value
-    Exact(&'a mut T),
-    /// This segment intersects one or more segments in the tree
-    Intersect,
-    /// This segment doesn't intersect any segment in the tree
-    Doesnt,
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum Insert<T> {
-    /// The exact segment is in the tree, this was the old value
-    Old(T),
-    /// This segment intersects one or more segments in the tree, the argument is returned
-    Intersect(T),
-    /// Inserted successfully
-    Inserted,
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum Contains {
-    /// The exact segment is in the tree
-    Exact,
-    /// This segment intersects one or more segments in the tree
-    Intersect,
-    /// This segment doesn't intersect any segment in the tree
-    Doesnt,
 }
 
 type InnerEntry<'a, V> = BEntry<'a, u64, SegmentValue<V>>;
@@ -277,42 +247,42 @@ impl<'a, V> OccupiedEntry<'a, V> {
 }
 
 macro_rules! impl_segment {
-    { $iter:expr, $seg:expr, $doesnt:path, $intersect:path, $exact:path } => {
+    { $iter:expr, $seg:expr, $missing:expr, $found:expr } => {
         let mut iter = $iter;
         match iter.next() {
-            None => $doesnt,
+            None => $missing,
             Some((start, SegmentValue::Start)) |
             Some((start, SegmentValue::StartEnd(_))) if start == &$seg.start => {
                 match iter.next() {
                     Some((end, SegmentValue::End(v))) |
                     Some((end, SegmentValue::StartEnd(v))) if end == &$seg.end => {
                         match iter.next() {
-                            None => $exact(v),
-                            _ => $intersect,
+                            None => $found(v),
+                            _ => Err(SegmentTreeError::Intersect),
                         }
                     }
-                    _ => $intersect,
+                    _ => Err(SegmentTreeError::Intersect),
                 }
             },
             Some((start, SegmentValue::End(_))) if start == &$seg.start => {
                 match iter.next() {
-                    None => $doesnt,
+                    None => $missing,
                     Some((end, SegmentValue::Start)) if end == &$seg.end => {
                         match iter.next() {
-                            None => $doesnt,
-                            _ => $intersect,
+                            None => $missing,
+                            _ => Err(SegmentTreeError::Intersect),
                         }
                     }
-                    _ => $intersect,
+                    _ => Err(SegmentTreeError::Intersect),
                 }
             }
             Some((end, SegmentValue::Start)) if end == &$seg.end => {
                 match iter.next() {
-                    None => $doesnt,
-                    _ => $intersect,
+                    None => $missing,
+                    _ => Err(SegmentTreeError::Intersect),
                 }
             }
-            Some(_) => $intersect,
+            Some(_) => Err(SegmentTreeError::Intersect),
         }
     }
 }
@@ -320,93 +290,92 @@ macro_rules! impl_segment {
 impl<T> SegmentTree<T> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
-    pub fn get_segment(&self, seg: Segment) -> Get<T> {
-        impl_segment! { self.0.range(seg.get_range()), seg, Get::Doesnt, Get::Intersect, Get::Exact }
+    pub fn get_segment(&self, seg: Segment) -> Result<Option<&T>> {
+        impl_segment! { self.0.range(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
-    pub fn get_mut_segment(&mut self, seg: Segment) -> GetMut<T> {
-        impl_segment! { self.0.range_mut(seg.get_range()), seg, GetMut::Doesnt, GetMut::Intersect, GetMut::Exact }
+    pub fn get_mut_segment(&mut self, seg: Segment) -> Result<Option<&mut T>> {
+        impl_segment! { self.0.range_mut(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
-    pub fn contains_segment(&self, seg: Segment) -> Contains { 
-        let exact = |_| Contains::Exact;
-        impl_segment! { self.0.range(seg.get_range()), seg, Contains::Doesnt, Contains::Intersect, exact }
+    pub fn contains_segment(&self, seg: Segment) -> Result<bool> {
+        impl_segment! { self.0.range(seg.get_range()), seg, Ok(false), |_| Ok(true) }
     }
 
     /// Gets an Ok(Entry), Vacant or Occupied, if the tree doesn't contain any intersection with the
     /// segment or contains it exactly. Returns None otherwise.
-    pub fn entry_segment(&mut self, seg: Segment) -> Option<Entry<T>> {
-        match self.contains_segment(seg) {
-            Contains::Exact => Some(Entry::Occupied(OccupiedEntry { tree: self, seg })),
-            Contains::Intersect => None,
-            Contains::Doesnt => Some(Entry::Vacant(VacantEntry { tree: self, seg })),
-        }
+    pub fn entry_segment(&mut self, seg: Segment) -> Result<Entry<T>> {
+        Ok(if self.contains_segment(seg)? {
+            Entry::Occupied(OccupiedEntry { tree: self, seg })
+        } else {
+            Entry::Vacant(VacantEntry { tree: self, seg })
+        })
     }
 
-    pub fn insert_segment(&mut self, seg: Segment, value: T) -> Insert<T> {
+    pub fn insert_segment(&mut self, seg: Segment, value: T) -> std::result::Result<Option<T>, (T, SegmentTreeError)> {
         match self.entry_segment(seg) {
-            Some(Entry::Vacant(entry)) => {
+            Ok(Entry::Vacant(entry)) => {
                 entry.insert(value);
-                Insert::Inserted
+                Ok(None)
             },
-            Some(Entry::Occupied(mut entry)) => Insert::Old(entry.insert(value)),
-            None => Insert::Intersect(value),
+            Ok(Entry::Occupied(mut entry)) => Ok(Some(entry.insert(value))),
+            Err(e) => Err((value, e)),
         }
     }
 
-    pub fn remove_segment(&mut self, seg: Segment) -> Option<T> {
-        match self.entry_segment(seg) {
-            Some(Entry::Vacant(_)) | None => None,
-            Some(Entry::Occupied(entry)) => Some(entry.remove()),
-        }
+    pub fn remove_segment(&mut self, seg: Segment) -> Result<Option<T>> {
+        Ok(match self.entry_segment(seg)? {
+            Entry::Vacant(_) => None,
+            Entry::Occupied(entry) => Some(entry.remove()),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Segment, SegmentTree, Get, GetMut, Insert, Contains, Entry};
+    use super::{Segment, SegmentTree, SegmentTreeError, Entry};
     #[test]
     fn smoke() {
         #[derive(Debug, PartialEq, Eq)]
         struct X(u64);
 
         let mut st = SegmentTree::new();
-        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Doesnt);
-        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), GetMut::Doesnt);
-        assert_eq!(st.contains_segment(Segment::new(1, 3)), Contains::Doesnt);
-        assert_eq!(st.insert_segment(Segment::new(1, 3), X(0)), Insert::Inserted);
-        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Exact(&X(0)));
-        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), GetMut::Exact(&mut X(0)));
-        assert_eq!(st.contains_segment(Segment::new(1, 3)), Contains::Exact);
-        assert_eq!(st.contains_segment(Segment::new(2, 3)), Contains::Intersect);
-        assert_eq!(st.contains_segment(Segment::new(2, 4)), Contains::Intersect);
-        assert_eq!(st.contains_segment(Segment::new(0, 2)), Contains::Intersect);
-        assert_eq!(st.contains_segment(Segment::new(0, 4)), Contains::Intersect);
-        assert_eq!(st.contains_segment(Segment::new(3, 6)), Contains::Doesnt);
-        assert_eq!(st.contains_segment(Segment::new(0, 1)), Contains::Doesnt);
-        assert_eq!(st.insert_segment(Segment::new(7, 9), X(1)), Insert::Inserted);
-        assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Insert::Intersect(X(2)));
-        assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Insert::Old(X(0)));
-        assert_eq!(st.insert_segment(Segment::new(3, 4), X(4)), Insert::Inserted);
-        assert_eq!(st.contains_segment(Segment::new(4, 7)), Contains::Doesnt);
-        assert_let!(Some(Entry::Vacant(entry)) = st.entry_segment(Segment::new(5, 7)), {
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Ok(None));
+        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), Ok(None));
+        assert_eq!(st.contains_segment(Segment::new(1, 3)), Ok(false));
+        assert_eq!(st.insert_segment(Segment::new(1, 3), X(0)), Ok(None));
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Ok(Some(&X(0))));
+        assert_eq!(st.get_mut_segment(Segment::new(1, 3)), Ok(Some(&mut X(0))));
+        assert_eq!(st.contains_segment(Segment::new(1, 3)), Ok(true));
+        assert_eq!(st.contains_segment(Segment::new(2, 3)), Err(SegmentTreeError::Intersect));
+        assert_eq!(st.contains_segment(Segment::new(2, 4)), Err(SegmentTreeError::Intersect));
+        assert_eq!(st.contains_segment(Segment::new(0, 2)), Err(SegmentTreeError::Intersect));
+        assert_eq!(st.contains_segment(Segment::new(0, 4)), Err(SegmentTreeError::Intersect));
+        assert_eq!(st.contains_segment(Segment::new(3, 6)), Ok(false));
+        assert_eq!(st.contains_segment(Segment::new(0, 1)), Ok(false));
+        assert_eq!(st.insert_segment(Segment::new(7, 9), X(1)), Ok(None));
+        assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Err((X(2), SegmentTreeError::Intersect)));
+        assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Ok(Some(X(0))));
+        assert_eq!(st.insert_segment(Segment::new(3, 4), X(4)), Ok(None));
+        assert_eq!(st.contains_segment(Segment::new(4, 7)), Ok(false));
+        assert_let!(Ok(Entry::Vacant(entry)) = st.entry_segment(Segment::new(5, 7)), {
             assert_eq!(entry.insert(X(5)), &mut X(5));
         });
-        assert_eq!(st.insert_segment(Segment::new(4, 5), X(6)), Insert::Inserted);
-        assert_eq!(st.get_segment(Segment::new(1, 3)), Get::Exact(&X(3)));
-        assert_eq!(st.get_segment(Segment::new(3, 4)), Get::Exact(&X(4)));
-        assert_eq!(st.get_segment(Segment::new(4, 5)), Get::Exact(&X(6)));
-        assert_eq!(st.get_segment(Segment::new(5, 7)), Get::Exact(&X(5)));
-        assert_let!(Some(Entry::Occupied(entry)) = st.entry_segment(Segment::new(4, 5)), {
+        assert_eq!(st.insert_segment(Segment::new(4, 5), X(6)), Ok(None));
+        assert_eq!(st.get_segment(Segment::new(1, 3)), Ok(Some(&X(3))));
+        assert_eq!(st.get_segment(Segment::new(3, 4)), Ok(Some(&X(4))));
+        assert_eq!(st.get_segment(Segment::new(4, 5)), Ok(Some(&X(6))));
+        assert_eq!(st.get_segment(Segment::new(5, 7)), Ok(Some(&X(5))));
+        assert_let!(Ok(Entry::Occupied(entry)) = st.entry_segment(Segment::new(4, 5)), {
             assert_eq!(entry.remove(), X(6));
         });
-        assert_eq!(st.get_segment(Segment::new(4, 5)), Get::Doesnt);
-        assert_let!(Some(Entry::Occupied(mut entry)) = st.entry_segment(Segment::new(5, 7)), {
+        assert_eq!(st.get_segment(Segment::new(4, 5)), Ok(None));
+        assert_let!(Ok(Entry::Occupied(mut entry)) = st.entry_segment(Segment::new(5, 7)), {
             assert_eq!(entry.insert(X(7)), X(5));
         });
-        assert_let!(None = st.entry_segment(Segment::new(0, 9)));
-        assert_eq!(st.remove_segment(Segment::new(0, 9)), None);
-        assert_eq!(st.remove_segment(Segment::new(4, 5)), None);
-        assert_eq!(st.remove_segment(Segment::new(5, 7)), Some(X(7)));
+        assert_let!(Err(SegmentTreeError::Intersect) = st.entry_segment(Segment::new(0, 9)));
+        assert_eq!(st.remove_segment(Segment::new(0, 9)), Err(SegmentTreeError::Intersect));
+        assert_eq!(st.remove_segment(Segment::new(4, 5)), Ok(None));
+        assert_eq!(st.remove_segment(Segment::new(5, 7)), Ok(Some(X(7))));
     }
 }
