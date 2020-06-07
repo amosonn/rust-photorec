@@ -6,26 +6,26 @@ use std::marker::PhantomData;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum FileDescriptionTreeError {
+pub enum SegmentArrayTreeError {
     #[error("Got error in underlaying SegmentTree: {0}")]
     SegmentTreeError(#[from] SegmentTreeError),
-    #[error("A FileDescription intersected with several disjoint FileDescription-s")]
-    OverlappingFileDecriptions,
-    #[error("Two intersecting FileDescription-s, without one being a strict superset of the other")]
-    IncompatibleFileDescriptions,
+    #[error("A SegmentArray intersected with several disjoint SegmentArray-s")]
+    OverlappingSegmentArrays,
+    #[error("Two intersecting SegmentArray-s, without one being a strict superset of the other")]
+    IncompatibleSegmentArrays,
 }
 
-type Result<T> = std::result::Result<T, FileDescriptionTreeError>;
+type Result<T> = std::result::Result<T, SegmentArrayTreeError>;
 
-pub struct FileDescriptionTree<M, I> {
+pub struct SegmentArrayTree<M, I> {
     tree: SegmentTree<usize>,
     descriptions: Vec<M>,
     _phantom: PhantomData<*const I>,
 }
 
-impl<M, I> FileDescriptionTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segment> + Eq {
+impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segment> + Eq {
     pub fn new() -> Self {
-        FileDescriptionTree {
+        SegmentArrayTree {
             tree: SegmentTree::new(),
             descriptions: Vec::new(),
             _phantom: PhantomData,
@@ -37,7 +37,7 @@ impl<M, I> FileDescriptionTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Se
         for seg in desc.as_ref().into_iter().map(|s| s.into()) {
             if let Some(x) = self.tree.get_segment(seg)? {
                 if idx.get_or_insert(*x) != x {
-                    return Err(FileDescriptionTreeError::OverlappingFileDecriptions);
+                    return Err(SegmentArrayTreeError::OverlappingSegmentArrays);
                 }
             }
         }
@@ -50,7 +50,7 @@ impl<M, I> FileDescriptionTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Se
             Some(x) => {
                 // Make sure they are really compatible
                 for (br1, br2) in desc.as_ref().into_iter().zip(self.descriptions[x].as_ref().into_iter()) {
-                    if br1 != br2 { return Err(FileDescriptionTreeError::IncompatibleFileDescriptions); }
+                    if br1 != br2 { return Err(SegmentArrayTreeError::IncompatibleSegmentArrays); }
                 }
                 // If the new one is larger, we insert it and return the old one
                 let idx = if desc.as_ref().into_iter().len() > self.descriptions[x].as_ref().into_iter().len() {
@@ -76,11 +76,11 @@ impl<M, I> FileDescriptionTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Se
 
 #[cfg(test)]
 mod tests {
-    use super::{FileDescriptionTree, FileDescriptionTreeError};
+    use super::{SegmentArrayTree, SegmentArrayTreeError};
     use crate::file_description::{ByteRun, FileDescription};
 
     #[test]
     fn smoke() {
-        let mut fdt: FileDescriptionTree<FileDescription, ByteRun> = FileDescriptionTree::new();
+        let mut fdt: SegmentArrayTree<FileDescription, ByteRun> = SegmentArrayTree::new();
     }
 }
