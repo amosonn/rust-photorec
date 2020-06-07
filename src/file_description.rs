@@ -6,9 +6,10 @@ use std::io::{Seek, SeekFrom};
 use std::io;
 use std::fmt;
 use std::mem;
-use std::iter::IntoIterator;
 
 use thiserror::Error;
+
+use crate::segment_tree::Segment;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ByteRun {
@@ -20,6 +21,12 @@ pub struct ByteRun {
 impl fmt::Display for ByteRun {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(file_offset: {}, disk_pos: {}, len: {})", self.file_offset, self.disk_pos, self.len)
+    }
+}
+
+impl From<&ByteRun> for Segment {
+    fn from(br: &ByteRun) -> Self {
+        Segment { start: br.disk_pos, end: br.disk_pos + br.len }
     }
 }
 
@@ -97,14 +104,10 @@ impl FileDescription {
     }
 
     pub fn size(&self) -> u64 { self.size }
-
-    pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter { (&self).into_iter() }
 }
 
-impl<'a> IntoIterator for &'a FileDescription {
-    type Item = &'a ByteRun;
-    type IntoIter = <&'a [ByteRun] as IntoIterator>::IntoIter;
-    fn into_iter(self) -> Self::IntoIter { self.runs.into_iter() }
+impl AsRef<[ByteRun]> for FileDescription {
+    fn as_ref(&self) -> &[ByteRun] { &self.runs }
 }
 
 impl<'a> Desc<'a> for FileDescription {
