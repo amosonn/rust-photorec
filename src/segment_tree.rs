@@ -13,6 +13,10 @@ pub struct Segment {
     pub end: u64,
 }
 
+impl From<&Segment> for Segment {
+    fn from(seg: &Segment) -> Self { *seg }
+}
+
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SegmentTreeError {
     #[error("Requested segment intersects one in the tree")]
