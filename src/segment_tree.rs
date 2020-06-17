@@ -19,8 +19,8 @@ impl From<&Segment> for Segment {
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SegmentTreeError {
-    #[error("Requested segment intersects one in the tree")]
-    Intersect,
+    #[error("Requested segment intersects one in the tree, at point {0}")]
+    Intersect(u64),
 }
 
 type Result<T> = std::result::Result<T, SegmentTreeError>;
@@ -262,10 +262,10 @@ macro_rules! impl_segment {
                     Some((end, SegmentValue::StartEnd(v))) if end == &$seg.end => {
                         match iter.next() {
                             None => $found(v),
-                            _ => Err(SegmentTreeError::Intersect),
+                            _ => panic!("range should not contain nodes after end"),
                         }
                     }
-                    _ => Err(SegmentTreeError::Intersect),
+                    _ => Err(SegmentTreeError::Intersect(*start)),
                 }
             },
             Some((start, SegmentValue::End(_))) if start == &$seg.start => {
@@ -274,19 +274,21 @@ macro_rules! impl_segment {
                     Some((end, SegmentValue::Start)) if end == &$seg.end => {
                         match iter.next() {
                             None => $missing,
-                            _ => Err(SegmentTreeError::Intersect),
+                            _ => panic!("range should not contain nodes after end"),
                         }
                     }
-                    _ => Err(SegmentTreeError::Intersect),
+                    Some((point, _)) => Err(SegmentTreeError::Intersect(*point)),
                 }
             }
             Some((end, SegmentValue::Start)) if end == &$seg.end => {
                 match iter.next() {
                     None => $missing,
-                    _ => Err(SegmentTreeError::Intersect),
+                    _ => panic!("range should not contain nodes after end"),
                 }
             }
-            Some(_) => Err(SegmentTreeError::Intersect),
+            Some((_, SegmentValue::End(_))) |
+            Some((_, SegmentValue::StartEnd(_)))  => Err(SegmentTreeError::Intersect($seg.start)),
+            Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(*start)),
         }
     }
 }
@@ -369,14 +371,15 @@ mod tests {
         assert_eq!(st.get_segment(Segment::new(1, 3)), Ok(Some(&X(0))));
         assert_eq!(st.get_mut_segment(Segment::new(1, 3)), Ok(Some(&mut X(0))));
         assert_eq!(st.contains_segment(Segment::new(1, 3)), Ok(true));
-        assert_eq!(st.contains_segment(Segment::new(2, 3)), Err(SegmentTreeError::Intersect));
-        assert_eq!(st.contains_segment(Segment::new(2, 4)), Err(SegmentTreeError::Intersect));
-        assert_eq!(st.contains_segment(Segment::new(0, 2)), Err(SegmentTreeError::Intersect));
-        assert_eq!(st.contains_segment(Segment::new(0, 4)), Err(SegmentTreeError::Intersect));
+        // TODO: these are brittle, we should check for ranges
+        assert_eq!(st.contains_segment(Segment::new(2, 3)), Err(SegmentTreeError::Intersect(2)));
+        assert_eq!(st.contains_segment(Segment::new(2, 4)), Err(SegmentTreeError::Intersect(2)));
+        assert_eq!(st.contains_segment(Segment::new(0, 2)), Err(SegmentTreeError::Intersect(1)));
+        assert_eq!(st.contains_segment(Segment::new(0, 4)), Err(SegmentTreeError::Intersect(1)));
         assert_eq!(st.contains_segment(Segment::new(3, 6)), Ok(false));
         assert_eq!(st.contains_segment(Segment::new(0, 1)), Ok(false));
         assert_eq!(st.insert_segment(Segment::new(7, 9), X(1)), Ok(None));
-        assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Err((X(2), SegmentTreeError::Intersect)));
+        assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Err((X(2), SegmentTreeError::Intersect(1))));
         assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Ok(Some(X(0))));
         assert_eq!(st.insert_segment(Segment::new(3, 4), X(4)), Ok(None));
         assert_eq!(st.contains_segment(Segment::new(4, 7)), Ok(false));
@@ -396,8 +399,8 @@ mod tests {
         assert_let!(Ok(Entry::Occupied(mut entry)) = st.entry_segment(Segment::new(5, 7)), {
             assert_eq!(entry.insert(X(7)), X(5));
         });
-        assert_let!(Err(SegmentTreeError::Intersect) = st.entry_segment(Segment::new(0, 9)));
-        assert_eq!(st.remove_segment(Segment::new(0, 9)), Err(SegmentTreeError::Intersect));
+        assert_let!(Err(SegmentTreeError::Intersect(1)) = st.entry_segment(Segment::new(0, 9)));
+        assert_eq!(st.remove_segment(Segment::new(0, 9)), Err(SegmentTreeError::Intersect(1)));
         assert_eq!(st.remove_segment(Segment::new(4, 5)), Ok(None));
         assert_eq!(st.remove_segment(Segment::new(5, 7)), Ok(Some(X(7))));
         assert_eq!(st.get_containing_segment(0), None);
