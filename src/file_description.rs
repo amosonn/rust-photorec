@@ -24,7 +24,7 @@ impl fmt::Display for ByteRun {
     }
 }
 
-impl From<&ByteRun> for Segment {
+impl From<&ByteRun> for Segment<u64> {
     fn from(br: &ByteRun) -> Self {
         Segment { start: br.disk_pos, end: br.disk_pos + br.len }
     }

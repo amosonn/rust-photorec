@@ -23,7 +23,7 @@ pub struct SegmentArrayTree<M, I> {
     _phantom: PhantomData<*const I>,
 }
 
-impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segment> + Eq {
+impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segment<u64>> + Eq {
     pub fn new() -> Self {
         SegmentArrayTree {
             tree: SegmentTree::new(),
@@ -81,12 +81,12 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct SegmentVecAndInt {
-        pub vec: Vec<Segment>,
+        pub vec: Vec<Segment<u64>>,
         pub num: u64,
     }
 
-    impl AsRef<[Segment]> for SegmentVecAndInt {
-        fn as_ref(&self) -> &[Segment] {
+    impl AsRef<[Segment<u64>]> for SegmentVecAndInt {
+        fn as_ref(&self) -> &[Segment<u64>] {
             &self.vec.as_ref()
         }
     }
@@ -118,7 +118,7 @@ mod tests {
         pub extra: char,
     }
 
-    impl From<&RichSegment> for Segment {
+    impl From<&RichSegment> for Segment<u64> {
         fn from(rs: &RichSegment) -> Self {
             Segment {
                 start: rs.start,
