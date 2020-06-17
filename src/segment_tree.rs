@@ -28,36 +28,36 @@ type Result<T> = std::result::Result<T, SegmentTreeError>;
 type BTree<V> = BTreeMap<u64, SegmentValue<V>>;
 
 #[derive(Clone, Debug)]
-pub struct SegmentTree<T>(BTree<T>);
+pub struct SegmentTree<V>(BTree<V>);
 
 impl Segment {
     pub fn new(start: u64, end: u64) -> Segment { assert!(start < end); Segment { start, end } }
     fn get_range(&self) -> impl RangeBounds<u64> { self.start..=self.end }
 }
 
-/// The value for a SegmentTree<T>
+/// The value for a SegmentTree<V>
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum SegmentValue<T> {
+enum SegmentValue<V> {
     /// This is the start of a segment
     Start,
     /// This is the end of a segment, we store the real value here
-    End(T),
+    End(V),
     /// This is the start of one segment and the end of another
-    StartEnd(T),
+    EndStart(V),
 }
 
-impl<T> SegmentValue<T> {
-    fn get_ref<'a>(&'a self) -> Option<&'a T> {
+impl<V> SegmentValue<V> {
+    fn get_ref<'a>(&'a self) -> Option<&'a V> {
         match self {
             SegmentValue::Start => None,
-            SegmentValue::End(ref t) | SegmentValue::StartEnd(ref t) => Some(t)
+            SegmentValue::End(ref t) | SegmentValue::EndStart(ref t) => Some(t)
         }
     }
 
-    fn get_mut<'a>(&'a mut self) -> Option<&'a mut T> {
+    fn get_mut<'a>(&'a mut self) -> Option<&'a mut V> {
         match self {
             SegmentValue::Start => None,
-            SegmentValue::End(ref mut t) | SegmentValue::StartEnd(ref mut t) => Some(t)
+            SegmentValue::End(ref mut t) | SegmentValue::EndStart(ref mut t) => Some(t)
         }
     }
 }
@@ -75,8 +75,8 @@ fn remove_start<V>(tree: &mut BTree<V>, start: &u64) {
         mem::swap(val, &mut owned);
         let v: V = match owned {
             SegmentValue::Start => panic!("We just checked this isn't Start..."),
-            SegmentValue::End(_) => panic!("Expected Start/StartEnd"),
-            SegmentValue::StartEnd(v) => v,
+            SegmentValue::End(_) => panic!("Expected Start/EndStart"),
+            SegmentValue::EndStart(v) => v,
         };
         let mut owned = SegmentValue::End(v);
         mem::swap(val, &mut owned);
@@ -92,9 +92,9 @@ fn remove_end<V>(tree: &mut BTree<V>, end: &u64) -> V {
         let mut owned = SegmentValue::Start;
         mem::swap(val, &mut owned);
         match owned {
-            SegmentValue::Start => panic!("Expected End/StartEnd"),
+            SegmentValue::Start => panic!("Expected End/EndStart"),
             SegmentValue::End(_) => panic!("We just checked this isn't End"),
-            SegmentValue::StartEnd(v) => v,
+            SegmentValue::EndStart(v) => v,
         }
     }
 }
@@ -113,10 +113,10 @@ fn add_start<'a, V>(entry: InnerEntry<'a, V>) {
             // This way we can "steal" the inner V
             mem::swap(entry, &mut owned);
             let v: V = match owned {
-                SegmentValue::Start | SegmentValue::StartEnd(_) => panic!("Didn't expect Start/StartEnd"),
+                SegmentValue::Start | SegmentValue::EndStart(_) => panic!("Didn't expect Start/EndStart"),
                 SegmentValue::End(v) => v,
             };
-            let mut owned = SegmentValue::StartEnd(v);
+            let mut owned = SegmentValue::EndStart(v);
             mem::swap(entry, &mut owned);
         },
     }
@@ -127,10 +127,10 @@ fn add_end<'a, V>(entry: InnerEntry<'a, V>, v: V) -> &'a mut V {
         BEntry::Vacant(entry) => entry.insert(SegmentValue::End(v)),
         BEntry::Occupied(entry) => {
             let entry = entry.into_mut();
-            let mut owned = SegmentValue::StartEnd(v);
+            let mut owned = SegmentValue::EndStart(v);
             mem::swap(entry, &mut owned);
             match owned {
-                SegmentValue::End(_) | SegmentValue::StartEnd(_) => panic!("Didn't expect End/StartEnd"),
+                SegmentValue::End(_) | SegmentValue::EndStart(_) => panic!("Didn't expect End/EndStart"),
                 SegmentValue::Start => {},
             };
             entry
@@ -257,10 +257,10 @@ macro_rules! impl_segment {
         match iter.next() {
             None => $missing,
             Some((start, SegmentValue::Start)) |
-            Some((start, SegmentValue::StartEnd(_))) if start == &$seg.start => {
+            Some((start, SegmentValue::EndStart(_))) if start == &$seg.start => {
                 match iter.next() {
                     Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::StartEnd(v))) if end == &$seg.end => {
+                    Some((end, SegmentValue::EndStart(v))) if end == &$seg.end => {
                         match iter.next() {
                             None => $found(v),
                             _ => panic!("range should not contain nodes after end"),
@@ -288,7 +288,7 @@ macro_rules! impl_segment {
                 }
             }
             Some((_, SegmentValue::End(_))) |
-            Some((_, SegmentValue::StartEnd(_)))  => Err(SegmentTreeError::Intersect($seg.start)),
+            Some((_, SegmentValue::EndStart(_)))  => Err(SegmentTreeError::Intersect($seg.start)),
             Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(*start)),
         }
     }
@@ -301,14 +301,14 @@ impl RangeBounds<u64> for RangeFromNonInclusive {
     fn end_bound(&self) -> Bound<&u64> { Bound::Unbounded }
 }
 
-impl<T> SegmentTree<T> {
+impl<V> SegmentTree<V> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
-    pub fn get_segment(&self, seg: &Segment) -> Result<Option<&T>> {
+    pub fn get_segment(&self, seg: &Segment) -> Result<Option<&V>> {
         impl_segment! { self.0.range(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
-    pub fn get_mut_segment(&mut self, seg: &Segment) -> Result<Option<&mut T>> {
+    pub fn get_mut_segment(&mut self, seg: &Segment) -> Result<Option<&mut V>> {
         impl_segment! { self.0.range_mut(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
@@ -318,7 +318,7 @@ impl<T> SegmentTree<T> {
 
     /// Gets an Ok(Entry), Vacant or Occupied, if the tree doesn't contain any intersection with the
     /// segment or contains it exactly. Returns None otherwise.
-    pub fn entry_segment(&mut self, seg: Segment) -> Result<Entry<T>> {
+    pub fn entry_segment(&mut self, seg: Segment) -> Result<Entry<V>> {
         Ok(if self.contains_segment(&seg)? {
             Entry::Occupied(OccupiedEntry { tree: self, seg })
         } else {
@@ -326,7 +326,7 @@ impl<T> SegmentTree<T> {
         })
     }
 
-    pub fn insert_segment(&mut self, seg: Segment, value: T) -> std::result::Result<Option<T>, (T, SegmentTreeError)> {
+    pub fn insert_segment(&mut self, seg: Segment, value: V) -> std::result::Result<Option<V>, (V, SegmentTreeError)> {
         match self.entry_segment(seg) {
             Ok(Entry::Vacant(entry)) => {
                 entry.insert(value);
@@ -337,7 +337,7 @@ impl<T> SegmentTree<T> {
         }
     }
 
-    pub fn remove_segment(&mut self, seg: &Segment) -> Result<Option<T>> {
+    pub fn remove_segment(&mut self, seg: &Segment) -> Result<Option<V>> {
         Ok(if self.contains_segment(seg)? {
             Some(remove(&mut self.0, seg))
         } else {
@@ -345,12 +345,12 @@ impl<T> SegmentTree<T> {
         })
     }
 
-    pub fn get_containing_segment(&self, point: u64) -> Option<(Segment, &T)> {
+    pub fn get_containing_segment(&self, point: u64) -> Option<(Segment, &V)> {
         let (start_idx, start_val) = self.0.range(..=point).next_back()?;
         let (end_idx, end_val) = self.0.range(RangeFromNonInclusive(point)).next()?;
         if let SegmentValue::End(_) = start_val { return None; }
         let val = match end_val {
-            SegmentValue::End(x) | SegmentValue::StartEnd(x) => x,
+            SegmentValue::End(x) | SegmentValue::EndStart(x) => x,
             SegmentValue::Start => { return None; },
         };
         Some((Segment { start: *start_idx, end: *end_idx }, val))
