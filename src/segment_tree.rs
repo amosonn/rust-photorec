@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::BTreeMap;
 use std::mem;
-use core::ops::RangeBounds;
+use core::ops::{RangeBounds, Bound};
 
 use thiserror::Error;
 
@@ -291,6 +291,13 @@ macro_rules! impl_segment {
     }
 }
 
+struct RangeFromNonInclusive(u64);
+
+impl RangeBounds<u64> for RangeFromNonInclusive {
+    fn start_bound(&self) -> Bound<&u64> { Bound::Excluded(&self.0) }
+    fn end_bound(&self) -> Bound<&u64> { Bound::Unbounded }
+}
+
 impl<T> SegmentTree<T> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
@@ -333,6 +340,17 @@ impl<T> SegmentTree<T> {
             Entry::Occupied(entry) => Some(entry.remove()),
         })
     }
+
+    pub fn get_containing_segment(&self, point: u64) -> Option<(Segment, &T)> {
+        let (start_idx, start_val) = self.0.range(..=point).next_back()?;
+        let (end_idx, end_val) = self.0.range(RangeFromNonInclusive(point)).next()?;
+        if let SegmentValue::End(_) = start_val { return None; }
+        let val = match end_val {
+            SegmentValue::End(x) | SegmentValue::StartEnd(x) => x,
+            SegmentValue::Start => { return None; },
+        };
+        Some((Segment { start: *start_idx, end: *end_idx }, val))
+    }
 }
 
 #[cfg(test)]
@@ -370,6 +388,7 @@ mod tests {
         assert_eq!(st.get_segment(Segment::new(3, 4)), Ok(Some(&X(4))));
         assert_eq!(st.get_segment(Segment::new(4, 5)), Ok(Some(&X(6))));
         assert_eq!(st.get_segment(Segment::new(5, 7)), Ok(Some(&X(5))));
+        assert_eq!(st.get_segment(Segment::new(7, 9)), Ok(Some(&X(1))));
         assert_let!(Ok(Entry::Occupied(entry)) = st.entry_segment(Segment::new(4, 5)), {
             assert_eq!(entry.remove(), X(6));
         });
@@ -381,5 +400,14 @@ mod tests {
         assert_eq!(st.remove_segment(Segment::new(0, 9)), Err(SegmentTreeError::Intersect));
         assert_eq!(st.remove_segment(Segment::new(4, 5)), Ok(None));
         assert_eq!(st.remove_segment(Segment::new(5, 7)), Ok(Some(X(7))));
+        assert_eq!(st.get_containing_segment(0), None);
+        assert_eq!(st.get_containing_segment(1), Some((Segment::new(1, 3), &X(3))));
+        assert_eq!(st.get_containing_segment(2), Some((Segment::new(1, 3), &X(3))));
+        assert_eq!(st.get_containing_segment(3), Some((Segment::new(3, 4), &X(4))));
+        assert_eq!(st.get_containing_segment(4), None);
+        assert_eq!(st.get_containing_segment(5), None);
+        assert_eq!(st.get_containing_segment(7), Some((Segment::new(7, 9), &X(1))));
+        assert_eq!(st.get_containing_segment(9), None);
+        assert_eq!(st.get_containing_segment(10), None);
     }
 }
