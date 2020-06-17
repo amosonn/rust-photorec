@@ -35,7 +35,7 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
     pub fn add(&mut self, mut desc: M) -> Result<Option<M>>  {
         let mut idx: Option<usize> = None;
         for seg in desc.as_ref().into_iter().map(|s| s.into()) {
-            if let Some(x) = self.tree.get_segment(seg)? {
+            if let Some(x) = self.tree.get_segment(&seg)? {
                 if idx.get_or_insert(*x) != x {
                     return Err(SegmentArrayTreeError::OverlappingSegmentArrays);
                 }
