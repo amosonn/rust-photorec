@@ -17,7 +17,7 @@ pub enum SegmentArrayTreeError {
 
 pub struct SegmentArrayTree<M, I> {
     tree: SegmentTree<u64, usize>,
-    descriptions: Vec<M>,
+    segment_arrays: Vec<M>,
     _phantom: PhantomData<*const I>,
 }
 
@@ -25,14 +25,14 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
     pub fn new() -> Self {
         SegmentArrayTree {
             tree: SegmentTree::new(),
-            descriptions: Vec::new(),
+            segment_arrays: Vec::new(),
             _phantom: PhantomData,
         }
     }
 
-    pub fn search_intersecting(&mut self, desc: &M) -> Result<Option<usize>, SegmentArrayTreeError> {
+    pub fn search_intersecting(&mut self, seg_arr: &M) -> Result<Option<usize>, SegmentArrayTreeError> {
         let mut idx: Option<usize> = None;
-        for seg in desc.as_ref().into_iter().map(|s| s.into()) {
+        for seg in seg_arr.as_ref().into_iter().map(|s| s.into()) {
             if let Some(x) = self.tree.get_segment(&seg)? {
                 if idx.get_or_insert(*x) != x {
                     return Err(SegmentArrayTreeError::OverlappingSegmentArrays(idx.unwrap(), *x));
@@ -42,35 +42,35 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
         Ok(idx)
     }
 
-    pub fn add(&mut self, mut desc: M) -> Result<Option<M>, (M, SegmentArrayTreeError)>  {
-        let idx = match self.search_intersecting(&desc) {
+    pub fn add(&mut self, mut seg_arr: M) -> Result<Option<M>, (M, SegmentArrayTreeError)>  {
+        let idx = match self.search_intersecting(&seg_arr) {
             Ok(idx) => idx,
-            Err(e) => { return Err((desc, e)); },
+            Err(e) => { return Err((seg_arr, e)); },
         };
 
         let (idx, ret) = match idx {
             None => {
-                self.descriptions.push(desc);
-                (Some(self.descriptions.len() - 1), None)
+                self.segment_arrays.push(seg_arr);
+                (Some(self.segment_arrays.len() - 1), None)
             }
             Some(x) => {
                 // Make sure they are really compatible
-                for (br1, br2) in desc.as_ref().into_iter().zip(self.descriptions[x].as_ref().into_iter()) {
-                    if br1 != br2 { return Err((desc, SegmentArrayTreeError::IncompatibleSegmentArrays(x))); }
+                for (br1, br2) in seg_arr.as_ref().into_iter().zip(self.segment_arrays[x].as_ref().into_iter()) {
+                    if br1 != br2 { return Err((seg_arr, SegmentArrayTreeError::IncompatibleSegmentArrays(x))); }
                 }
                 // If the new one is larger, we insert it and return the old one
-                let idx = if desc.as_ref().into_iter().len() > self.descriptions[x].as_ref().into_iter().len() {
-                    std::mem::swap(&mut desc, &mut self.descriptions[x]);
+                let idx = if seg_arr.as_ref().into_iter().len() > self.segment_arrays[x].as_ref().into_iter().len() {
+                    std::mem::swap(&mut seg_arr, &mut self.segment_arrays[x]);
                     Some(x)
                 // Else, we don't need to add any segments to the tree
                 } else { None };
-                (idx, Some(desc))
+                (idx, Some(seg_arr))
             }
         };
 
-        // Some(idx) means that the description in idx is new
+        // Some(idx) means that the segment array in idx is new
         if let Some(idx) = idx {
-            for seg in self.descriptions[idx].as_ref().into_iter().map(|s| s.into()) {
+            for seg in self.segment_arrays[idx].as_ref().into_iter().map(|s| s.into()) {
                 // We already checked that all the segments are ok
                 if let Entry::Vacant(entry) = self.tree.entry_segment(seg).unwrap() {
                     entry.insert(idx);
@@ -81,7 +81,7 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
         Ok(ret)
     }
 
-    pub fn get_by_idx(&self, idx: usize) -> &M { &self.descriptions[idx] }
+    pub fn get_by_idx(&self, idx: usize) -> &M { &self.segment_arrays[idx] }
 }
 
 #[cfg(test)]
