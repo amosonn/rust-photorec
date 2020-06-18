@@ -8,7 +8,7 @@ use thiserror::Error;
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SegmentArrayTreeError {
     #[error("Got error in underlaying SegmentTree: {0}")]
-    SegmentTreeError(#[from] SegmentTreeError),
+    SegmentTreeError(#[from] SegmentTreeError<u64>),
     #[error("A SegmentArray intersected with several disjoint SegmentArray-s")]
     OverlappingSegmentArrays,
     #[error("Two intersecting SegmentArray-s, without one being a strict superset of the other")]
@@ -18,7 +18,7 @@ pub enum SegmentArrayTreeError {
 type Result<T> = std::result::Result<T, SegmentArrayTreeError>;
 
 pub struct SegmentArrayTree<M, I> {
-    tree: SegmentTree<usize>,
+    tree: SegmentTree<u64, usize>,
     descriptions: Vec<M>,
     _phantom: PhantomData<*const I>,
 }

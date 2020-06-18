@@ -2,6 +2,7 @@ use std::collections::btree_map::Entry as BEntry;
 use std::collections::BTreeMap;
 use std::mem;
 use core::ops::{RangeBounds, Bound};
+use core::fmt::Debug;
 
 use thiserror::Error;
 
@@ -18,17 +19,17 @@ impl From<&Segment<u64>> for Segment<u64> {
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum SegmentTreeError {
-    #[error("Requested segment intersects one in the tree, at point {0}")]
-    Intersect(u64),
+pub enum SegmentTreeError<K: Debug> {
+    #[error("Requested segment intersects one in the tree, at point {0:?}")]
+    Intersect(K),
 }
 
-type Result<T> = std::result::Result<T, SegmentTreeError>;
+type Result<T, K> = std::result::Result<T, SegmentTreeError<K>>;
 
-type BTree<V> = BTreeMap<u64, SegmentValue<V>>;
+type BTree<K, V> = BTreeMap<K, SegmentValue<V>>;
 
 #[derive(Clone, Debug)]
-pub struct SegmentTree<V>(BTree<V>);
+pub struct SegmentTree<K, V>(BTree<K, V>);
 
 struct RefRangeInclusive<'a, T: 'a> {
     start: &'a T,
@@ -40,6 +41,20 @@ impl<'a, T> RangeBounds<T> for RefRangeInclusive<'a, T> {
     fn end_bound(&self) -> Bound<&T> { Bound::Included(self.end) }
 }
 
+struct RefRangeFromNonInclusive<'a, K>(&'a K);
+
+impl<'a, K> RangeBounds<K> for RefRangeFromNonInclusive<'a, K> {
+    fn start_bound(&self) -> Bound<&K> { Bound::Excluded(&self.0) }
+    fn end_bound(&self) -> Bound<&K> { Bound::Unbounded }
+}
+
+struct RefRangeToInclusive<'a, K>(&'a K);
+
+impl<'a, K> RangeBounds<K> for RefRangeToInclusive<'a, K> {
+    fn start_bound(&self) -> Bound<&K> { Bound::Unbounded }
+    fn end_bound(&self) -> Bound<&K> { Bound::Included(&self.0) }
+}
+
 impl<T: PartialOrd> Segment<T> {
     pub fn new(start: T, end: T) -> Segment<T> { assert!(start < end); Segment { start, end } }
 }
@@ -48,7 +63,7 @@ impl<'a, T: PartialOrd> Segment<T> {
     fn get_range(&'a self) -> impl RangeBounds<T> + 'a { RefRangeInclusive { start: &self.start, end: &self.end } }
 }
 
-/// The value for a SegmentTree<V>
+/// The value for a SegmentTree<K, V>
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SegmentValue<V> {
     /// This is the start of a segment
@@ -75,9 +90,9 @@ impl<V> SegmentValue<V> {
     }
 }
 
-type InnerEntry<'a, V> = BEntry<'a, u64, SegmentValue<V>>;
+type InnerEntry<'a, K, V> = BEntry<'a, K, SegmentValue<V>>;
 
-fn remove_start<V>(tree: &mut BTree<V>, start: &u64) {
+fn remove_start<K: Ord + Debug + Clone, V>(tree: &mut BTree<K, V>, start: &K) {
     let val = tree.get_mut(start).unwrap();
     let remove: bool = if let SegmentValue::Start = val { true } else { false };
     if remove {
@@ -96,7 +111,7 @@ fn remove_start<V>(tree: &mut BTree<V>, start: &u64) {
     }
 }
 
-fn remove_end<V>(tree: &mut BTree<V>, end: &u64) -> V {
+fn remove_end<K: Ord + Debug + Clone, V>(tree: &mut BTree<K, V>, end: &K) -> V {
     let val = tree.get_mut(end).unwrap();
     let remove: bool = if let SegmentValue::End(_) = val { true } else { false };
     if remove {
@@ -112,12 +127,12 @@ fn remove_end<V>(tree: &mut BTree<V>, end: &u64) -> V {
     }
 }
 
-fn remove<V>(tree: &mut BTree<V>, seg: &Segment<u64>) -> V {
+fn remove<K: Ord + Debug + Clone, V>(tree: &mut BTree<K, V>, seg: &Segment<K>) -> V {
     remove_start(tree, &seg.start);
     remove_end(tree, &seg.end)
 }
 
-fn add_start<'a, V>(entry: InnerEntry<'a, V>) {
+fn add_start<'a, K: Ord + Debug + Clone, V>(entry: InnerEntry<'a, K, V>) {
     match entry {
         BEntry::Vacant(entry) => { entry.insert(SegmentValue::Start); }
         BEntry::Occupied(entry) => {
@@ -135,7 +150,7 @@ fn add_start<'a, V>(entry: InnerEntry<'a, V>) {
     }
 }
 
-fn add_end<'a, V>(entry: InnerEntry<'a, V>, v: V) -> &'a mut V {
+fn add_end<'a, K: Ord + Debug + Clone, V>(entry: InnerEntry<'a, K, V>, v: V) -> &'a mut V {
     match entry {
         BEntry::Vacant(entry) => entry.insert(SegmentValue::End(v)),
         BEntry::Occupied(entry) => {
@@ -152,24 +167,24 @@ fn add_end<'a, V>(entry: InnerEntry<'a, V>, v: V) -> &'a mut V {
 }
 
 #[derive(Debug)]
-pub enum Entry<'a, V> {
-    Vacant(VacantEntry<'a, V>),
-    Occupied(OccupiedEntry<'a, V>),
+pub enum Entry<'a, K, V> {
+    Vacant(VacantEntry<'a, K, V>),
+    Occupied(OccupiedEntry<'a, K, V>),
 }
 
 #[derive(Debug)]
-pub struct VacantEntry<'a, V> {
-    tree: &'a mut SegmentTree<V>,
-    seg: Segment<u64>,
+pub struct VacantEntry<'a, K, V> {
+    tree: &'a mut SegmentTree<K, V>,
+    seg: Segment<K>,
 }
 
 #[derive(Debug)]
-pub struct OccupiedEntry<'a, V> {
-    tree: &'a mut SegmentTree<V>,
-    seg: Segment<u64>,
+pub struct OccupiedEntry<'a, K, V> {
+    tree: &'a mut SegmentTree<K, V>,
+    seg: Segment<K>,
 }
 
-impl<'a, V> Entry<'a, V> {
+impl<'a, K: Ord + Debug + Clone, V> Entry<'a, K, V> {
     pub fn or_insert(self, default: V) -> &'a mut V {
         match self {
             Occupied(entry) => entry.into_mut(),
@@ -184,7 +199,7 @@ impl<'a, V> Entry<'a, V> {
         }
     }
 
-    pub fn key(&self) -> &Segment<u64> {
+    pub fn key(&self) -> &Segment<K> {
         match *self {
             Occupied(ref entry) => entry.key(),
             Vacant(ref entry) => entry.key(),
@@ -205,7 +220,7 @@ impl<'a, V> Entry<'a, V> {
     }
 }
 
-impl<'a, V: Default> Entry<'a, V> {
+impl<'a, K: Ord + Debug + Clone, V: Default> Entry<'a, K, V> {
     pub fn or_default(self) -> &'a mut V {
         match self {
             Occupied(entry) => entry.into_mut(),
@@ -214,12 +229,12 @@ impl<'a, V: Default> Entry<'a, V> {
     }
 }
 
-impl<'a, V> VacantEntry<'a, V> {
-    pub fn key(&self) -> &Segment<u64> {
+impl<'a, K: Ord + Debug + Clone, V> VacantEntry<'a, K, V> {
+    pub fn key(&self) -> &Segment<K> {
         &self.seg
     }
 
-    pub fn into_key(self) -> Segment<u64> {
+    pub fn into_key(self) -> Segment<K> {
         self.seg
     }
 
@@ -229,12 +244,12 @@ impl<'a, V> VacantEntry<'a, V> {
     }
 }
 
-impl<'a, V> OccupiedEntry<'a, V> {
-    pub fn key(&self) -> &Segment<u64> {
+impl<'a, K: Ord + Debug + Clone, V> OccupiedEntry<'a, K, V> {
+    pub fn key(&self) -> &Segment<K> {
         &self.seg
     }
 
-    pub fn remove_entry(mut self) -> (Segment<u64>, V) {
+    pub fn remove_entry(mut self) -> (Segment<K>, V) {
         let tmp = self.remove_impl();
         (self.seg, tmp)
     }
@@ -279,7 +294,7 @@ macro_rules! impl_segment {
                             _ => panic!("range should not contain nodes after end"),
                         }
                     }
-                    _ => Err(SegmentTreeError::Intersect(*start)),
+                    _ => Err(SegmentTreeError::Intersect(start.clone())),
                 }
             },
             Some((start, SegmentValue::End(_))) if start == &$seg.start => {
@@ -291,7 +306,7 @@ macro_rules! impl_segment {
                             _ => panic!("range should not contain nodes after end"),
                         }
                     }
-                    Some((point, _)) => Err(SegmentTreeError::Intersect(*point)),
+                    Some((point, _)) => Err(SegmentTreeError::Intersect(point.clone())),
                 }
             }
             Some((end, SegmentValue::Start)) if end == &$seg.end => {
@@ -301,37 +316,30 @@ macro_rules! impl_segment {
                 }
             }
             Some((_, SegmentValue::End(_))) |
-            Some((_, SegmentValue::EndStart(_)))  => Err(SegmentTreeError::Intersect($seg.start)),
-            Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(*start)),
+            Some((_, SegmentValue::EndStart(_)))  => Err(SegmentTreeError::Intersect($seg.start.clone())),
+            Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(start.clone())),
         }
     }
 }
 
-struct RangeFromNonInclusive(u64);
-
-impl RangeBounds<u64> for RangeFromNonInclusive {
-    fn start_bound(&self) -> Bound<&u64> { Bound::Excluded(&self.0) }
-    fn end_bound(&self) -> Bound<&u64> { Bound::Unbounded }
-}
-
-impl<V> SegmentTree<V> {
+impl<K: Ord + Debug + Clone, V> SegmentTree<K, V> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
-    pub fn get_segment(&self, seg: &Segment<u64>) -> Result<Option<&V>> {
+    pub fn get_segment(&self, seg: &Segment<K>) -> Result<Option<&V>, K> {
         impl_segment! { self.0.range(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
-    pub fn get_mut_segment(&mut self, seg: &Segment<u64>) -> Result<Option<&mut V>> {
+    pub fn get_mut_segment(&mut self, seg: &Segment<K>) -> Result<Option<&mut V>, K> {
         impl_segment! { self.0.range_mut(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
     }
 
-    pub fn contains_segment(&self, seg: &Segment<u64>) -> Result<bool> {
+    pub fn contains_segment(&self, seg: &Segment<K>) -> Result<bool, K> {
         impl_segment! { self.0.range(seg.get_range()), seg, Ok(false), |_| Ok(true) }
     }
 
     /// Gets an Ok(Entry), Vacant or Occupied, if the tree doesn't contain any intersection with the
     /// segment or contains it exactly. Returns None otherwise.
-    pub fn entry_segment(&mut self, seg: Segment<u64>) -> Result<Entry<V>> {
+    pub fn entry_segment(&mut self, seg: Segment<K>) -> Result<Entry<K, V>, K> {
         Ok(if self.contains_segment(&seg)? {
             Entry::Occupied(OccupiedEntry { tree: self, seg })
         } else {
@@ -339,7 +347,7 @@ impl<V> SegmentTree<V> {
         })
     }
 
-    pub fn insert_segment(&mut self, seg: Segment<u64>, value: V) -> std::result::Result<Option<V>, (V, SegmentTreeError)> {
+    pub fn insert_segment(&mut self, seg: Segment<K>, value: V) -> std::result::Result<Option<V>, (V, SegmentTreeError<K>)> {
         match self.entry_segment(seg) {
             Ok(Entry::Vacant(entry)) => {
                 entry.insert(value);
@@ -350,7 +358,7 @@ impl<V> SegmentTree<V> {
         }
     }
 
-    pub fn remove_segment(&mut self, seg: &Segment<u64>) -> Result<Option<V>> {
+    pub fn remove_segment(&mut self, seg: &Segment<K>) -> Result<Option<V>, K> {
         Ok(if self.contains_segment(seg)? {
             Some(remove(&mut self.0, seg))
         } else {
@@ -358,15 +366,15 @@ impl<V> SegmentTree<V> {
         })
     }
 
-    pub fn get_containing_segment(&self, point: u64) -> Option<(Segment<u64>, &V)> {
-        let (start_idx, start_val) = self.0.range(..=point).next_back()?;
-        let (end_idx, end_val) = self.0.range(RangeFromNonInclusive(point)).next()?;
+    pub fn get_containing_segment(&self, point: &K) -> Option<(Segment<K>, &V)> {
+        let (start_idx, start_val) = self.0.range(RefRangeToInclusive(point)).next_back()?;
+        let (end_idx, end_val) = self.0.range(RefRangeFromNonInclusive(point)).next()?;
         if let SegmentValue::End(_) = start_val { return None; }
         let val = match end_val {
             SegmentValue::End(x) | SegmentValue::EndStart(x) => x,
             SegmentValue::Start => { return None; },
         };
-        Some((Segment { start: *start_idx, end: *end_idx }, val))
+        Some((Segment { start: start_idx.clone(), end: end_idx.clone() }, val))
     }
 }
 
@@ -418,14 +426,14 @@ mod tests {
         assert_eq!(st.remove_segment(&Segment::new(0, 9)), Err(SegmentTreeError::Intersect(1)));
         assert_eq!(st.remove_segment(&Segment::new(4, 5)), Ok(None));
         assert_eq!(st.remove_segment(&Segment::new(5, 7)), Ok(Some(X(7))));
-        assert_eq!(st.get_containing_segment(0), None);
-        assert_eq!(st.get_containing_segment(1), Some((Segment::new(1, 3), &X(3))));
-        assert_eq!(st.get_containing_segment(2), Some((Segment::new(1, 3), &X(3))));
-        assert_eq!(st.get_containing_segment(3), Some((Segment::new(3, 4), &X(4))));
-        assert_eq!(st.get_containing_segment(4), None);
-        assert_eq!(st.get_containing_segment(5), None);
-        assert_eq!(st.get_containing_segment(7), Some((Segment::new(7, 9), &X(1))));
-        assert_eq!(st.get_containing_segment(9), None);
-        assert_eq!(st.get_containing_segment(10), None);
+        assert_eq!(st.get_containing_segment(&0), None);
+        assert_eq!(st.get_containing_segment(&1), Some((Segment::new(1, 3), &X(3))));
+        assert_eq!(st.get_containing_segment(&2), Some((Segment::new(1, 3), &X(3))));
+        assert_eq!(st.get_containing_segment(&3), Some((Segment::new(3, 4), &X(4))));
+        assert_eq!(st.get_containing_segment(&4), None);
+        assert_eq!(st.get_containing_segment(&5), None);
+        assert_eq!(st.get_containing_segment(&7), Some((Segment::new(7, 9), &X(1))));
+        assert_eq!(st.get_containing_segment(&9), None);
+        assert_eq!(st.get_containing_segment(&10), None);
     }
 }
