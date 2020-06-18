@@ -12,7 +12,7 @@ pub use crate::file_description::{ByteRun, FileDescription, FileDescriptionPos, 
 pub use crate::reader::ByteRunsReader;
 pub use crate::report::{ReportXml, ReportXmlError};
 pub use crate::segment_tree::{Segment, SegmentTree, SegmentTreeError, Entry, VacantEntry, OccupiedEntry};
-pub use crate::segment_array_tree::{SegmentArrayTree, SegmentArrayTreeError};
+pub use crate::segment_array_tree::{SegmentArrayTree, SegmentArrayTreeError, AddStatus};
 
 #[cfg(test)]
 #[macro_use]

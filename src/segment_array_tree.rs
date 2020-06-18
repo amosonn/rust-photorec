@@ -21,6 +21,16 @@ pub struct SegmentArrayTree<M, I> {
     _phantom: PhantomData<*const I>,
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub enum AddStatus<M> {
+    /// The segment array was added, didn't intersect with any existing one
+    Added,
+    /// The tree already contained a larger or equal segment array, here is the argument back
+    AlreadyContained(M),
+    /// The segment array extended an older one, here it is
+    Replaced(M),
+}
+
 impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segment<u64>> + Eq {
     pub fn new() -> Self {
         SegmentArrayTree {
@@ -42,7 +52,7 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
         Ok(idx)
     }
 
-    pub fn add(&mut self, mut seg_arr: M) -> Result<Option<M>, (M, SegmentArrayTreeError)>  {
+    pub fn add(&mut self, mut seg_arr: M) -> Result<AddStatus<M>, (M, SegmentArrayTreeError)>  {
         let idx = match self.search_intersecting(&seg_arr) {
             Ok(idx) => idx,
             Err(e) => { return Err((seg_arr, e)); },
@@ -51,7 +61,7 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
         let (idx, ret) = match idx {
             None => {
                 self.segment_arrays.push(seg_arr);
-                (Some(self.segment_arrays.len() - 1), None)
+                (Some(self.segment_arrays.len() - 1), AddStatus::Added)
             }
             Some(x) => {
                 // Make sure they are really compatible
@@ -59,12 +69,13 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
                     if br1 != br2 { return Err((seg_arr, SegmentArrayTreeError::IncompatibleSegmentArrays(x))); }
                 }
                 // If the new one is larger, we insert it and return the old one
-                let idx = if seg_arr.as_ref().into_iter().len() > self.segment_arrays[x].as_ref().into_iter().len() {
+                if seg_arr.as_ref().into_iter().len() > self.segment_arrays[x].as_ref().into_iter().len() {
                     std::mem::swap(&mut seg_arr, &mut self.segment_arrays[x]);
-                    Some(x)
+                    (Some(x), AddStatus::Replaced(seg_arr))
                 // Else, we don't need to add any segments to the tree
-                } else { None };
-                (idx, Some(seg_arr))
+                } else {
+                    (None, AddStatus::AlreadyContained(seg_arr))
+                }
             }
         };
 
@@ -86,7 +97,7 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
 
 #[cfg(test)]
 mod tests {
-    use super::{SegmentArrayTree, SegmentArrayTreeError};
+    use super::{SegmentArrayTree, SegmentArrayTreeError, AddStatus};
     use crate::segment_tree::Segment;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,13 +122,13 @@ mod tests {
     #[test]
     fn smoke() {
         let mut sat = SegmentArrayTree::new();
-        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15)], 0)), Ok(None));
-        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 10)), Ok(Some(build(vec![(1, 3), (7, 10), (13, 15)], 0))));
-        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 20)), Ok(Some(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 20))));
+        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15)], 0)), Ok(AddStatus::Added));
+        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 10)), Ok(AddStatus::Replaced(build(vec![(1, 3), (7, 10), (13, 15)], 0))));
+        assert_eq!(sat.add(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 20)), Ok(AddStatus::AlreadyContained(build(vec![(1, 3), (7, 10), (13, 15), (17, 18)], 20))));
         assert_let!(Ok(Some(i)) = sat.search_intersecting(&build(vec![(1, 3), (13, 15), (20, 22)], 25)), {
             assert_eq!(sat.get_by_idx(i).num, 10);
         });
-        assert_eq!(sat.add(build(vec![(3, 6), (10, 13), (16, 17)], 30)), Ok(None));
+        assert_eq!(sat.add(build(vec![(3, 6), (10, 13), (16, 17)], 30)), Ok(AddStatus::Added));
         assert_let!(Err(SegmentArrayTreeError::OverlappingSegmentArrays(i1, i2)) = sat.search_intersecting(&build(vec![(1, 3), (10, 13)], 40)), {
             assert_eq!(sat.get_by_idx(i1).num, 10);
             assert_eq!(sat.get_by_idx(i2).num, 30);
@@ -178,7 +189,7 @@ mod tests {
     #[test]
     fn test_elem_comparison() {
         let mut sat = SegmentArrayTree::new();
-        assert_eq!(sat.add(rich_build(vec![(1, 3, 'a'), (7, 10, 'b'), (13, 15, 'c')], 0)), Ok(None));
+        assert_eq!(sat.add(rich_build(vec![(1, 3, 'a'), (7, 10, 'b'), (13, 15, 'c')], 0)), Ok(AddStatus::Added));
         assert_let!(Err((sv, SegmentArrayTreeError::IncompatibleSegmentArrays(i))) = sat.add(rich_build(vec![(1, 3, 'a'), (7, 10, 'd'), (13, 15, 'c')], 1)), {
             assert_eq!(sv.num, 1);
             assert_eq!(sat.get_by_idx(i).num, 0);
