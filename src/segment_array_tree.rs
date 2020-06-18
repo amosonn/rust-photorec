@@ -15,6 +15,7 @@ pub enum SegmentArrayTreeError {
     IncompatibleSegmentArrays(usize),
 }
 
+#[derive(Debug, Clone)]
 pub struct SegmentArrayTree<M, I> {
     tree: SegmentTree<u64, usize>,
     segment_arrays: Vec<M>,
