@@ -7,11 +7,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SegmentArrayTreeError {
-    #[error("Got error in underlaying SegmentTree: {0}")]
-    SegmentTreeError(#[from] SegmentTreeError<u64>),
-    #[error("A SegmentArray intersected with several disjoint SegmentArray-s")]
+    #[error("Intersected a segment with segment array at index {0}")]
+    IntersectingSegment(usize),
+    #[error("A SegmentArray overlapped with several disjoint SegmentArray-s, at least at indexes {0}, {1}")]
     OverlappingSegmentArrays(usize, usize),
-    #[error("Two intersecting SegmentArray-s, without one being a strict superset of the other")]
+    #[error("Overlapped with SegmentArray at index {0}, without one being a strict extension of the other")]
     IncompatibleSegmentArrays(usize),
 }
 
@@ -44,10 +44,16 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
     pub fn search_intersecting(&mut self, seg_arr: &M) -> Result<Option<usize>, SegmentArrayTreeError> {
         let mut idx: Option<usize> = None;
         for seg in seg_arr.as_ref().into_iter().map(|s| s.into()) {
-            if let Some(x) = self.tree.get_segment(&seg)? {
-                if idx.get_or_insert(*x) != x {
-                    return Err(SegmentArrayTreeError::OverlappingSegmentArrays(idx.unwrap(), *x));
-                }
+            match self.tree.get_segment(&seg) {
+                Ok(None) => { continue; },
+                Ok(Some(x)) => {
+                    if idx.get_or_insert(*x) != x {
+                        return Err(SegmentArrayTreeError::OverlappingSegmentArrays(idx.unwrap(), *x));
+                    }
+                },
+                Err(SegmentTreeError::Intersect(point)) => {
+                    return Err(SegmentArrayTreeError::IntersectingSegment(*self.tree.get_containing_segment(&point).unwrap().1));
+                },
             }
         }
         Ok(idx)
@@ -139,8 +145,9 @@ mod tests {
             assert_eq!(sat.get_by_idx(i1).num, 10);
             assert_eq!(sat.get_by_idx(i2).num, 30);
         });
-        assert_let!(Err((sv, SegmentArrayTreeError::SegmentTreeError(_))) = sat.add(build(vec![(2, 4)], 50)), {
+        assert_let!(Err((sv, SegmentArrayTreeError::IntersectingSegment(i))) = sat.add(build(vec![(2, 4)], 50)), {
             assert_eq!(sv.num, 50);
+            assert_eq!(sat.get_by_idx(i).num, 10);
         });
         assert_let!(Err((sv, SegmentArrayTreeError::IncompatibleSegmentArrays(i))) = sat.add(build(vec![(3, 6), (16, 17)], 60)), {
             assert_eq!(sv.num, 60);
