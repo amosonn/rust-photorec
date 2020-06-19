@@ -2,9 +2,7 @@
 // A parser, from photorec report.xml to a container of all file descriptions
 // in it, including implementation for "opening" a file so.
 //
-use std::io::Read;
-use std::vec;
-use std::num;
+use std::{io::Read, num, slice};
 
 use thiserror::Error;
 
@@ -15,7 +13,7 @@ use super::file_description::{ByteRun, FileDescription, FileDescriptionError};
 #[derive(Debug)]
 pub struct ReportXml {
     image_filename: String,
-    iter: vec::IntoIter<Element>,
+    elems: Vec<Element>,
 }
 
 type Result<T> = std::result::Result<T, ReportXmlError>;
@@ -67,10 +65,10 @@ fn assert_name<'a>(elem: &'a Element, name: &'static str) -> Result<()> {
 }
 
 
-fn to_file_description(elem: Element) -> Result<(String, FileDescription)> {
-    let name = get_text(get_child(&elem, "filename")?)?.clone();
-    let size = get_number(get_child(&elem, "filesize")?)?;
-    let byte_runs = get_child(&elem, "byte_runs")?.children.iter()
+fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
+    let name = get_text(get_child(elem, "filename")?)?.clone();
+    let size = get_number(get_child(elem, "filesize")?)?;
+    let byte_runs = get_child(elem, "byte_runs")?.children.iter()
         .map(|x| -> Result<ByteRun> {
             assert_name(x, "byte_run")?;
             let file_offset = get_attr_number(x, "offset")?;
@@ -93,17 +91,21 @@ impl ReportXml {
         };
         Ok(ReportXml {
             image_filename: image_filename.clone(),
-            iter: elem.children.into_iter(),
+            elems: elem.children,
         })
     }
     
     pub fn image_filename(&self) -> &String { &self.image_filename }
+
+    pub fn iter(&self) -> ReportXmlIterator { ReportXmlIterator(self.elems.iter()) }
 }
 
-impl Iterator for ReportXml {
+pub struct ReportXmlIterator<'a>(slice::Iter<'a, Element>);
+
+impl<'a> Iterator for ReportXmlIterator<'a> {
     type Item = Result<(String, FileDescription)>;
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.find(|ref x| x.name == "fileobject").map(to_file_description)
+        self.0.find(|ref x| x.name == "fileobject").map(to_file_description)
     }
 }
 
@@ -172,8 +174,9 @@ fn test_report_xml_parse() {
     </byte_runs>
   </fileobject>
 </dfxml>"##;
-    let mut rx = ReportXml::parse(s.as_bytes()).unwrap();
+    let rx = ReportXml::parse(s.as_bytes()).unwrap();
     assert_eq!(rx.image_filename(), "/dev/sdb");
+    let mut rx = rx.iter();
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140247350_assets.zip");
     // We only check errors are handled and iteration continues
@@ -352,7 +355,8 @@ fn test_report_xml_iter_errors() {
     </byte_runs>
   </fileobject>
 </dfxml>"##;
-    let mut rx = ReportXml::parse(s.as_bytes()).unwrap();
+    let rx = ReportXml::parse(s.as_bytes()).unwrap();
+    let mut rx = rx.iter();
     let e = rx.next().unwrap().err().unwrap();
     assert_let!(ReportXmlError::MissingField { field_name: ref s } = e, {
         assert_eq!(*s, "filename");
