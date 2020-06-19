@@ -296,36 +296,26 @@ macro_rules! impl_segment {
                 $missing
             },
             Some((start, SegmentValue::Start)) |
-            Some((start, SegmentValue::EndStart(_))) if start == &$seg.start => {
-                match iter.next() {
-                    Some((end, SegmentValue::End(v))) |
-                    Some((end, SegmentValue::EndStart(v))) if end == &$seg.end => {
-                        match iter.next() {
-                            None => $found(v),
-                            _ => panic!("range should not contain nodes after end"),
-                        }
-                    }
-                    _ => Err(SegmentTreeError::Intersect(start.clone())),
-                }
+            Some((start, SegmentValue::EndStart(_))) if start == &$seg.start => match iter.next() {
+                Some((end, SegmentValue::End(v))) |
+                Some((end, SegmentValue::EndStart(v))) if end == &$seg.end => match iter.next() {
+                    None => $found(v),
+                    _ => panic!("range should not contain nodes after end"),
+                },
+                _ => Err(SegmentTreeError::Intersect(start.clone())),
             },
-            Some((start, SegmentValue::End(_))) if start == &$seg.start => {
-                match iter.next() {
-                    None => $missing,
-                    Some((end, SegmentValue::Start)) if end == &$seg.end => {
-                        match iter.next() {
-                            None => $missing,
-                            _ => panic!("range should not contain nodes after end"),
-                        }
-                    }
-                    Some((point, _)) => Err(SegmentTreeError::Intersect(point.clone())),
-                }
-            }
-            Some((end, SegmentValue::Start)) if end == &$seg.end => {
-                match iter.next() {
+            Some((start, SegmentValue::End(_))) if start == &$seg.start => match iter.next() {
+                None => $missing,
+                Some((end, SegmentValue::Start)) if end == &$seg.end => match iter.next() {
                     None => $missing,
                     _ => panic!("range should not contain nodes after end"),
-                }
-            }
+                },
+                Some((point, _)) => Err(SegmentTreeError::Intersect(point.clone())),
+            },
+            Some((end, SegmentValue::Start)) if end == &$seg.end => match iter.next() {
+                None => $missing,
+                _ => panic!("range should not contain nodes after end"),
+            },
             Some((_, SegmentValue::End(_))) |
             Some((_, SegmentValue::EndStart(_))) => Err(SegmentTreeError::Intersect($seg.start.clone())),
             Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(start.clone())),
