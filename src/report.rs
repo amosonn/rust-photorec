@@ -12,7 +12,7 @@ use super::file_description::{ByteRun, FileDescription, FileDescriptionError};
 
 #[derive(Debug)]
 pub struct ReportXml {
-    image_filename: String,
+    image_filename: Option<String>,
     elems: Vec<Element>,
 }
 
@@ -82,20 +82,21 @@ fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
 }
 
 impl ReportXml {
+    fn fetch_image_filename(elem: &Element) -> Option<&String> {
+        let source = get_child(elem, "source").ok()?;
+        let source = get_child(source, "image_filename").ok()?;
+        get_text(source).ok()
+    }
+
     pub fn parse<R: Read>(reader: R) -> Result<Self> {
         let elem = Element::parse(reader)?;
-        let image_filename = {
-            let source = get_child(&elem, "source")?;
-            let source = get_child(source, "image_filename")?;
-            get_text(source)?
-        };
         Ok(ReportXml {
-            image_filename: image_filename.clone(),
+            image_filename: Self::fetch_image_filename(&elem).map(|x| x.clone()),
             elems: elem.children,
         })
     }
     
-    pub fn image_filename(&self) -> &String { &self.image_filename }
+    pub fn image_filename(&self) -> Option<&String> { self.image_filename.as_ref() }
 
     pub fn iter(&self) -> ReportXmlIterator { ReportXmlIterator(self.elems.iter()) }
 }
@@ -175,7 +176,7 @@ fn test_report_xml_parse() {
   </fileobject>
 </dfxml>"##;
     let rx = ReportXml::parse(s.as_bytes()).unwrap();
-    assert_eq!(rx.image_filename(), "/dev/sdb");
+    assert_eq!(rx.image_filename(), Some(&"/dev/sdb".to_owned()));
     let mut rx = rx.iter();
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140247350_assets.zip");
@@ -192,24 +193,23 @@ fn test_report_xml_parse_errors() {
 <dfxml xmloutputversion='1.0'"##;
     let rx_err = ReportXml::parse(s.as_bytes());
     assert_let!(Err(ReportXmlError::Parse(_)) = rx_err);
+}
 
+#[test]
+fn test_report_xml_missing_image_filename() {
     let s = r##"<?xml version='1.0' encoding='UTF-8'?>
 <dfxml xmloutputversion='1.0'>
 </dfxml>"##;
-    let rx_err = ReportXml::parse(s.as_bytes());
-    assert_let!(Err(ReportXmlError::MissingField { field_name: ref s }) = rx_err, {
-        assert_eq!(*s, "source");
-    });
+    let rx = ReportXml::parse(s.as_bytes()).unwrap();
+    assert_eq!(rx.image_filename(), None);
 
     let s = r##"<?xml version='1.0' encoding='UTF-8'?>
 <dfxml xmloutputversion='1.0'>
   <source>
   </source>
 </dfxml>"##;
-    let rx_err = ReportXml::parse(s.as_bytes());
-    assert_let!(Err(ReportXmlError::MissingField { field_name: ref s }) = rx_err, {
-        assert_eq!(*s, "image_filename");
-    });
+    let rx = ReportXml::parse(s.as_bytes()).unwrap();
+    assert_eq!(rx.image_filename(), None);
 
     let s = r##"<?xml version='1.0' encoding='UTF-8'?>
 <dfxml xmloutputversion='1.0'>
@@ -217,10 +217,8 @@ fn test_report_xml_parse_errors() {
     <image_filename />
   </source>
 </dfxml>"##;
-    let rx_err = ReportXml::parse(s.as_bytes());
-    assert_let!(Err(ReportXmlError::MissingText { field_name: ref s }) = rx_err, {
-        assert_eq!(*s, "image_filename");
-    });
+    let rx = ReportXml::parse(s.as_bytes()).unwrap();
+    assert_eq!(rx.image_filename(), None);
 }
 
 #[test]
