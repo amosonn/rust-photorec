@@ -2,7 +2,7 @@
 // A parser, from photorec report.xml to a container of all file descriptions
 // in it, including implementation for "opening" a file so.
 //
-use std::{io::Read, num, slice};
+use std::{io::Read, num, slice, mem};
 
 use thiserror::Error;
 
@@ -98,6 +98,11 @@ impl ReportXml {
     
     pub fn image_filename(&self) -> Option<&String> { self.image_filename.as_ref() }
 
+    pub fn set_image_filename(&mut self, mut image_filename: Option<String>) -> Option<String> {
+        mem::swap(&mut self.image_filename, &mut image_filename);
+        image_filename
+    }
+
     pub fn iter(&self) -> ReportXmlIterator { ReportXmlIterator(self.elems.iter()) }
 }
 
@@ -175,8 +180,10 @@ fn test_report_xml_parse() {
     </byte_runs>
   </fileobject>
 </dfxml>"##;
-    let rx = ReportXml::parse(s.as_bytes()).unwrap();
+    let mut rx = ReportXml::parse(s.as_bytes()).unwrap();
     assert_eq!(rx.image_filename(), Some(&"/dev/sdb".to_owned()));
+    assert_eq!(rx.set_image_filename(Some("/dev/sdc".to_owned())), Some("/dev/sdb".to_owned()));
+    assert_eq!(rx.set_image_filename(None), Some("/dev/sdc".to_owned()));
     let mut rx = rx.iter();
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140247350_assets.zip");
