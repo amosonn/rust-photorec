@@ -2,18 +2,18 @@
 // A parser, from photorec report.xml to a container of all file descriptions
 // in it, including implementation for "opening" a file so.
 //
-use std::{io::Read, num, slice, mem};
+use std::{io::Read, num, mem};
 
 use thiserror::Error;
 
-use xmltree::{Element, ParseError};
+use xmltree::{Element, ParseError, XMLNode};
 
 use super::file_description::{ByteRun, FileDescription, FileDescriptionError};
 
 #[derive(Debug)]
 pub struct ReportXml {
     image_filename: Option<String>,
-    elems: Vec<Element>,
+    elems: Vec<XMLNode>,
 }
 
 type Result<T> = std::result::Result<T, ReportXmlError>;
@@ -42,8 +42,10 @@ fn get_child<'a>(elem: &'a Element, name: &'static str) -> Result<&'a Element> {
     elem.get_child(name).ok_or(ReportXmlError::MissingField { field_name: name })
 }
 
-fn get_text<'a>(elem: &'a Element) -> Result<&'a String> {
-    elem.text.as_ref().ok_or(ReportXmlError::MissingText { field_name: elem.name.clone() })
+fn get_text<'a>(elem: &'a Element) -> Result<&'a str> {
+    elem.children.get(0).and_then(|x| {
+        if let XMLNode::Text(s) = x { Some(s.as_ref()) } else { None }
+    }).ok_or(ReportXmlError::MissingText { field_name: elem.name.clone() })
 }
 
 fn get_number<'a>(elem: &'a Element) -> Result<u64> {
@@ -64,11 +66,11 @@ fn assert_name<'a>(elem: &'a Element, name: &'static str) -> Result<()> {
     }
 }
 
-
 fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
-    let name = get_text(get_child(elem, "filename")?)?.clone();
+    let name = get_text(get_child(elem, "filename")?)?.to_owned();
     let size = get_number(get_child(elem, "filesize")?)?;
     let byte_runs = get_child(elem, "byte_runs")?.children.iter()
+        .filter_map(|x| { if let XMLNode::Element(e) = x { Some(e) } else { None } })
         .map(|x| -> Result<ByteRun> {
             assert_name(x, "byte_run")?;
             let file_offset = get_attr_number(x, "offset")?;
@@ -82,7 +84,7 @@ fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
 }
 
 impl ReportXml {
-    fn fetch_image_filename(elem: &Element) -> Option<&String> {
+    fn fetch_image_filename(elem: &Element) -> Option<&str> {
         let source = get_child(elem, "source").ok()?;
         let source = get_child(source, "image_filename").ok()?;
         get_text(source).ok()
@@ -91,7 +93,7 @@ impl ReportXml {
     pub fn parse<R: Read>(reader: R) -> Result<Self> {
         let elem = Element::parse(reader)?;
         Ok(ReportXml {
-            image_filename: Self::fetch_image_filename(&elem).map(|x| x.clone()),
+            image_filename: Self::fetch_image_filename(&elem).map(|x| x.to_owned()),
             elems: elem.children,
         })
     }
@@ -103,7 +105,13 @@ impl ReportXml {
         image_filename
     }
 
-    pub fn iter(&self) -> ReportXmlIterator { ReportXmlIterator(self.elems.iter()) }
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=Result<(String, FileDescription)>> + 'a {
+        self.elems.iter().filter_map(|ref x| {
+            if let XMLNode::Element(e) = x {
+                if e.name == "fileobject" { Some(to_file_description(e)) } else { None }
+            } else { None }
+        })
+    }
 }
 
 pub struct ReportXmlIterator<'a>(slice::Iter<'a, Element>);

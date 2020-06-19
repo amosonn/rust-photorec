@@ -6,7 +6,7 @@ description = "Rust interface for using photorec report.xml files."
 edition = "2018"
 
 [dependencies]
-xmltree = "0.3.2"
+xmltree = "0.10.0"
 thiserror = "1.0.19"
 
 [dev-dependencies]
