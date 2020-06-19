@@ -2,6 +2,7 @@
 use super::segment_tree::{Segment, SegmentTree, SegmentTreeError, Entry};
 
 use std::marker::PhantomData;
+use std::slice;
 
 use thiserror::Error;
 
@@ -100,12 +101,16 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
     }
 
     pub fn get_by_idx(&self, idx: usize) -> &M { &self.segment_arrays[idx] }
+
+    pub fn iter<'a>(&'a self) -> slice::Iter<'a, M> { self.segment_arrays.iter() }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{SegmentArrayTree, SegmentArrayTreeError, AddStatus};
     use crate::segment_tree::Segment;
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct SegmentVecAndInt {
@@ -157,6 +162,7 @@ mod tests {
             assert_eq!(sv.num, 70);
             assert_eq!(sat.get_by_idx(i).num, 30);
         });
+        assert_eq!(sat.iter().map(|sv| sv.num).collect::<HashSet<u64>>(), HashSet::<u64>::from_iter(vec![10, 30]));
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
