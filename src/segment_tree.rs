@@ -55,6 +55,13 @@ impl<'a, K> RangeBounds<K> for RefRangeToInclusive<'a, K> {
     fn end_bound(&self) -> Bound<&K> { Bound::Included(&self.0) }
 }
 
+struct RefRangeTo<'a, K>(&'a K);
+
+impl<'a, K> RangeBounds<K> for RefRangeTo<'a, K> {
+    fn start_bound(&self) -> Bound<&K> { Bound::Unbounded }
+    fn end_bound(&self) -> Bound<&K> { Bound::Excluded(&self.0) }
+}
+
 impl<T: PartialOrd> Segment<T> {
     pub fn new(start: T, end: T) -> Segment<T> { assert!(start < end); Segment { start, end } }
 }
@@ -280,10 +287,14 @@ impl<'a, K: Ord + Debug + Clone, V> OccupiedEntry<'a, K, V> {
 }
 
 macro_rules! impl_segment {
-    { $iter:expr, $seg:expr, $missing:expr, $found:expr } => {
+    { $iter:expr, $seg:expr, $missing:expr, $found:expr, $maybe_contained:ident } => {
         let mut iter = $iter;
         match iter.next() {
-            None => $missing,
+            None => if $maybe_contained {
+                Err(SegmentTreeError::Intersect($seg.start.clone()))
+            } else {
+                $missing
+            },
             Some((start, SegmentValue::Start)) |
             Some((start, SegmentValue::EndStart(_))) if start == &$seg.start => {
                 match iter.next() {
@@ -316,7 +327,7 @@ macro_rules! impl_segment {
                 }
             }
             Some((_, SegmentValue::End(_))) |
-            Some((_, SegmentValue::EndStart(_)))  => Err(SegmentTreeError::Intersect($seg.start.clone())),
+            Some((_, SegmentValue::EndStart(_))) => Err(SegmentTreeError::Intersect($seg.start.clone())),
             Some((start, SegmentValue::Start)) => Err(SegmentTreeError::Intersect(start.clone())),
         }
     }
@@ -325,16 +336,27 @@ macro_rules! impl_segment {
 impl<K: Ord + Debug + Clone, V> SegmentTree<K, V> {
     pub fn new() -> Self { SegmentTree(BTreeMap::new()) }
 
+    #[inline]
+    fn check_maybe_contained(&self, seg: &Segment<K>) -> bool {
+        match self.0.range(RefRangeTo(&seg.start)).next_back() {
+            Some((_, &SegmentValue::Start)) | Some((_, &SegmentValue::EndStart(_))) => true,
+            _ => false,
+        }
+    }
+
     pub fn get_segment(&self, seg: &Segment<K>) -> Result<Option<&V>, K> {
-        impl_segment! { self.0.range(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
+        let maybe_contained = self.check_maybe_contained(seg);
+        impl_segment! { self.0.range(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)), maybe_contained }
     }
 
     pub fn get_mut_segment(&mut self, seg: &Segment<K>) -> Result<Option<&mut V>, K> {
-        impl_segment! { self.0.range_mut(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)) }
+        let maybe_contained = self.check_maybe_contained(seg);
+        impl_segment! { self.0.range_mut(seg.get_range()), seg, Ok(None), |v| Ok(Some(v)), maybe_contained }
     }
 
     pub fn contains_segment(&self, seg: &Segment<K>) -> Result<bool, K> {
-        impl_segment! { self.0.range(seg.get_range()), seg, Ok(false), |_| Ok(true) }
+        let maybe_contained = self.check_maybe_contained(seg);
+        impl_segment! { self.0.range(seg.get_range()), seg, Ok(false), |_| Ok(true), maybe_contained }
     }
 
     /// Gets an Ok(Entry), Vacant or Occupied, if the tree doesn't contain any intersection with the
@@ -381,18 +403,23 @@ impl<K: Ord + Debug + Clone, V> SegmentTree<K, V> {
 #[cfg(test)]
 mod tests {
     use super::{Segment, SegmentTree, SegmentTreeError, Entry};
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct X(u64);
+
     #[test]
     fn smoke() {
-        #[derive(Debug, PartialEq, Eq)]
-        struct X(u64);
-
         let mut st = SegmentTree::new();
         assert_eq!(st.get_segment(&Segment::new(1, 3)), Ok(None));
         assert_eq!(st.get_mut_segment(&Segment::new(1, 3)), Ok(None));
         assert_eq!(st.contains_segment(&Segment::new(1, 3)), Ok(false));
         assert_eq!(st.insert_segment(Segment::new(1, 3), X(0)), Ok(None));
         assert_eq!(st.get_segment(&Segment::new(1, 3)), Ok(Some(&X(0))));
-        assert_eq!(st.get_mut_segment(&Segment::new(1, 3)), Ok(Some(&mut X(0))));
+        assert_let!(Ok(Some(x)) = st.get_mut_segment(&Segment::new(1, 3)), {
+            assert_eq!(x, &mut X(0));
+            x.0 = 10;
+        });
+        assert_eq!(st.get_segment(&Segment::new(1, 3)), Ok(Some(&X(10))));
         assert_eq!(st.contains_segment(&Segment::new(1, 3)), Ok(true));
         // TODO: these are brittle, we should check for ranges
         assert_eq!(st.contains_segment(&Segment::new(2, 3)), Err(SegmentTreeError::Intersect(2)));
@@ -403,7 +430,7 @@ mod tests {
         assert_eq!(st.contains_segment(&Segment::new(0, 1)), Ok(false));
         assert_eq!(st.insert_segment(Segment::new(7, 9), X(1)), Ok(None));
         assert_eq!(st.insert_segment(Segment::new(1, 5), X(2)), Err((X(2), SegmentTreeError::Intersect(1))));
-        assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Ok(Some(X(0))));
+        assert_eq!(st.insert_segment(Segment::new(1, 3), X(3)), Ok(Some(X(10))));
         assert_eq!(st.insert_segment(Segment::new(3, 4), X(4)), Ok(None));
         assert_eq!(st.contains_segment(&Segment::new(4, 7)), Ok(false));
         assert_let!(Ok(Entry::Vacant(entry)) = st.entry_segment(Segment::new(5, 7)), {
@@ -435,5 +462,12 @@ mod tests {
         assert_eq!(st.get_containing_segment(&7), Some((Segment::new(7, 9), &X(1))));
         assert_eq!(st.get_containing_segment(&9), None);
         assert_eq!(st.get_containing_segment(&10), None);
+    }
+
+    #[test]
+    fn inside() {
+        let mut st = SegmentTree::new();
+        assert_eq!(st.insert_segment(Segment::new(1, 5), X(0)), Ok(None));
+        assert_eq!(st.insert_segment(Segment::new(2, 4), X(1)), Err((X(1), SegmentTreeError::Intersect(2))));
     }
 }
