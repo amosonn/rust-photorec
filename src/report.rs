@@ -199,6 +199,10 @@ fn test_report_xml_parse() {
     let _e = rx.next().unwrap().err().unwrap();
     let e = rx.next().unwrap().unwrap();
     assert_eq!(e.0, "f140197124_res.zip");
+    let mut sl = e.1.as_ref().iter();
+    assert_eq!(sl.next(), Some(&ByteRun { file_offset: 0, disk_pos: 1234, len: 50 }));
+    assert_eq!(sl.next(), Some(&ByteRun { file_offset: 50, disk_pos: 5678, len: 30 }));
+    assert_eq!(sl.next(), None);
     assert!(rx.next().is_none());
 }
 
