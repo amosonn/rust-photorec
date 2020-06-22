@@ -2,7 +2,7 @@
 // A parser, from photorec report.xml to a container of all file descriptions
 // in it, including implementation for "opening" a file so.
 //
-use std::{io::Read, num, mem};
+use std::{io::Read, num, mem, iter::FromIterator, collections::HashMap};
 
 use thiserror::Error;
 
@@ -83,6 +83,31 @@ fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
     Ok((name, file_description))
 }
 
+fn from_file_description_and_name(name: String, fd: &FileDescription) -> XMLNode {
+    let mut filename_elem = Element::new("filename");
+    filename_elem.children = vec![XMLNode::Text(name)];
+    let mut size_elem = Element::new("filesize");
+    size_elem.children = vec![XMLNode::Text(format!("{}", fd.size()))];
+    let mut byte_runs_elem = Element::new("byte_runs");
+    byte_runs_elem.children = fd.as_ref().iter().map(|br| {
+        let mut attrs = HashMap::new();
+        attrs.insert("offset".to_owned(), format!("{}", br.file_offset));
+        attrs.insert("img_offset".to_owned(), format!("{}", br.disk_pos));
+        attrs.insert("len".to_owned(), format!("{}", br.len));
+        let mut e = Element::new("byte_run");
+        e.attributes = attrs;
+        XMLNode::Element(e)
+    }).collect();
+    let children = vec![
+        XMLNode::Element(filename_elem),
+        XMLNode::Element(size_elem),
+        XMLNode::Element(byte_runs_elem),
+    ];
+    let mut e = Element::new("fileobject");
+    e.children = children;
+    XMLNode::Element(e)
+}
+
 impl ReportXml {
     fn fetch_image_filename(elem: &Element) -> Option<&str> {
         let source = get_child(elem, "source").ok()?;
@@ -114,12 +139,12 @@ impl ReportXml {
     }
 }
 
-pub struct ReportXmlIterator<'a>(slice::Iter<'a, Element>);
-
-impl<'a> Iterator for ReportXmlIterator<'a> {
-    type Item = Result<(String, FileDescription)>;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.find(|ref x| x.name == "fileobject").map(to_file_description)
+impl<'a> FromIterator<(String, &'a FileDescription)> for ReportXml {
+    fn from_iter<T>(t: T) -> Self where T: IntoIterator<Item=(String, &'a FileDescription)> {
+        ReportXml {
+            image_filename: None,
+            elems: t.into_iter().map(|(s, fd)| from_file_description_and_name(s, fd)).collect(),
+        }
     }
 }
 
@@ -181,10 +206,10 @@ fn test_report_xml_parse() {
   </fileobject>
   <fileobject>
     <filename>f140197124_res.zip</filename>
-    <filesize>31628</filesize>
+    <filesize>80</filesize>
     <byte_runs>
-      <byte_run offset='0' img_offset='71797704704' len='19456'/>
-      <byte_run offset='19456' img_offset='71798924800' len='12288'/>
+      <byte_run offset='0' img_offset='1234' len='50'/>
+      <byte_run offset='50' img_offset='5678' len='50'/>
     </byte_runs>
   </fileobject>
 </dfxml>"##;
@@ -203,6 +228,24 @@ fn test_report_xml_parse() {
     assert_eq!(sl.next(), Some(&ByteRun { file_offset: 0, disk_pos: 1234, len: 50 }));
     assert_eq!(sl.next(), Some(&ByteRun { file_offset: 50, disk_pos: 5678, len: 30 }));
     assert_eq!(sl.next(), None);
+    assert!(rx.next().is_none());
+}
+
+#[test]
+fn test_from_iterator() {
+    let brs1 = vec![ByteRun { file_offset: 0, disk_pos: 1234, len: 50 }, ByteRun { file_offset: 50, disk_pos: 5678, len: 30 }];
+    let brs2 = vec![ByteRun { file_offset: 0, disk_pos: 4321, len: 20 }, ByteRun { file_offset: 20, disk_pos: 8765, len: 50 }];
+    let fd1 = FileDescription::new(80, brs1.clone()).unwrap();
+    let fd2 = FileDescription::new(70, brs2.clone()).unwrap();
+    let fds = vec![("a".to_owned(), &fd1), ("b".to_owned(), &fd2)];
+    let rx = ReportXml::from_iter(fds);
+    let mut rx = rx.iter();
+    let e = rx.next().unwrap().unwrap();
+    assert_eq!(e.0, "a");
+    assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
+    let e = rx.next().unwrap().unwrap();
+    assert_eq!(e.0, "b");
+    assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
     assert!(rx.next().is_none());
 }
 
