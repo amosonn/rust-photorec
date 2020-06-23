@@ -2,15 +2,15 @@
 // A parser, from photorec report.xml to a container of all file descriptions
 // in it, including implementation for "opening" a file so.
 //
-use std::{io::Read, num, mem, iter::FromIterator, collections::HashMap};
+use std::{io::{Read, Write}, num, mem, iter::FromIterator, collections::HashMap};
 
 use thiserror::Error;
 
-use xmltree::{Element, ParseError, XMLNode};
+use xmltree::{Element, ParseError, XMLNode, Error as WriteError, EmitterConfig};
 
 use super::file_description::{ByteRun, FileDescription, FileDescriptionError};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReportXml {
     image_filename: Option<String>,
     elems: Vec<XMLNode>,
@@ -137,6 +137,17 @@ impl ReportXml {
             } else { None }
         })
     }
+
+    pub fn write<W: Write>(self, writer: W) -> std::result::Result<(), WriteError> {
+        let source_elem = self.image_filename.map(|s| {
+            let mut elem = Element::new("source");
+            elem.children = vec![XMLNode::Text(s)];
+            XMLNode::Element(elem)
+        });
+        let mut elem = Element::new("dfxml");
+        elem.children = source_elem.into_iter().chain(self.elems).collect();
+        elem.write_with_config(writer, EmitterConfig::new().perform_indent(true))
+    }
 }
 
 impl<'a> FromIterator<(String, &'a FileDescription)> for ReportXml {
@@ -152,7 +163,7 @@ impl<'a> FromIterator<(String, &'a FileDescription)> for ReportXml {
 mod tests {
     use super::{ReportXml, ReportXmlError};
     use crate::file_description::{ByteRun, FileDescription, FileDescriptionError};
-    use std::iter::FromIterator;
+    use std::{iter::FromIterator, io::{Cursor, SeekFrom, Seek}};
 
     #[test]
     fn test_report_xml_parse() {
@@ -238,21 +249,35 @@ mod tests {
     }
 
     #[test]
-    fn test_from_iterator() {
+    fn test_from_iterator_and_write() {
         let brs1 = vec![ByteRun { file_offset: 0, disk_pos: 1234, len: 50 }, ByteRun { file_offset: 50, disk_pos: 5678, len: 30 }];
         let brs2 = vec![ByteRun { file_offset: 0, disk_pos: 4321, len: 20 }, ByteRun { file_offset: 20, disk_pos: 8765, len: 50 }];
         let fd1 = FileDescription::new(80, brs1.clone()).unwrap();
         let fd2 = FileDescription::new(70, brs2.clone()).unwrap();
         let fds = vec![("a".to_owned(), &fd1), ("b".to_owned(), &fd2)];
         let rx = ReportXml::from_iter(fds);
-        let mut rx = rx.iter();
-        let e = rx.next().unwrap().unwrap();
+        {
+            let mut rx_i = rx.iter();
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "a");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "b");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
+            assert!(rx_i.next().is_none());
+        }
+        let mut buf = Cursor::new(Vec::new());
+        rx.write(&mut buf).unwrap();
+        buf.seek(SeekFrom::Start(0)).unwrap();
+        let rx = ReportXml::parse(buf).unwrap();
+        let mut rx_i = rx.iter();
+        let e = rx_i.next().unwrap().unwrap();
         assert_eq!(e.0, "a");
         assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
-        let e = rx.next().unwrap().unwrap();
+        let e = rx_i.next().unwrap().unwrap();
         assert_eq!(e.0, "b");
         assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
-        assert!(rx.next().is_none());
+        assert!(rx_i.next().is_none());
     }
 
     #[test]
