@@ -1,7 +1,8 @@
 
-use std::env::args;
+use std::env::args_os;
 use std::fs::File;
 use std::fmt::{Formatter, Error as FmtError, Display};
+use std::{path::Path, iter::FromIterator};
 
 use photorec::{SegmentArrayTree, SegmentArrayTreeError, ReportXml, FileDescription, ByteRun};
 
@@ -26,12 +27,18 @@ impl<'a> AsRef<[ByteRun]> for FileDescriptionWithContext<'a> {
 
 fn main() {
     let mut sats = vec![SegmentArrayTree::new()];
-    for (fname, report) in args().skip(1).map(|fname| {
-        println!("Parsing file {0}", &fname);
-        let f = File::open(&fname).expect(&fname);
-        let report = ReportXml::parse(f).expect(&fname);
-        (fname, report)
-    }).collect::<Vec<_>>().iter() {
+    let mut it = args_os().skip(1);
+    // let temp = it.next_back().unwrap();
+    let temp = it.next().unwrap();
+    let output_dir = Path::new(&temp);
+    let reports = it.map(|fname| {
+        let lossy = fname.to_string_lossy();
+        println!("Parsing file {0}", &lossy);
+        let f = File::open(&fname).expect(&lossy);
+        let report = ReportXml::parse(f).expect(&lossy);
+        (lossy.into_owned(), report)
+    }).collect::<Vec<_>>();
+    for (fname, report) in reports.iter() {
         println!();
         println!("Adding file {0}", &fname);
         for r in report.iter() {
@@ -76,5 +83,11 @@ fn main() {
                 }
             }
         }
+    }
+    for (num, sat) in sats.into_iter().enumerate() {
+        let output_path = output_dir.join(format!("report{}.xml", num));
+        let f = File::create(output_path).unwrap();
+        let rx = ReportXml::from_iter(sat.into_iter().map(|fdwc| (fdwc.desc_name, fdwc.desc)));
+        rx.write(f).unwrap();
     }
 }
