@@ -4,7 +4,7 @@ use std::fs::File;
 use std::fmt::{Formatter, Error as FmtError, Display};
 use std::{path::Path, iter::FromIterator};
 
-use photorec::{SegmentArrayTree, SegmentArrayTreeError, ReportXml, FileDescription, ByteRun};
+use photorec::{SegmentArrayTree, SegmentArrayTreeError, ReportXml, FileDescription, ByteRun, AddStatus};
 
 #[derive(Debug)]
 struct FileDescriptionWithContext<'a> {
@@ -56,22 +56,29 @@ fn main() {
                         if num == last {
                             add_new_tree = true;
                         }
-                        if let Err((_fdwc, e)) = sat.add(fdwc) {
-                            fdwc = _fdwc;
-                            let (fdwc1, fdwc2) = match e {
-                                SegmentArrayTreeError::IntersectingSegment(idx) =>
-                                    (sat.get_by_idx(idx), None),
-                                SegmentArrayTreeError::OverlappingSegmentArrays(idx1, idx2) =>
-                                    (sat.get_by_idx(idx1), Some(sat.get_by_idx(idx2))),
-                                SegmentArrayTreeError::IncompatibleSegmentArrays(idx) =>
-                                    (sat.get_by_idx(idx), None),
-                            };
-                            if let Some(fdwc2) = fdwc2 {
-                                println!("On tree {num}, got error {e}, with relevant file descriptions at {0}, {1}, {2}", fdwc, fdwc1, fdwc2, e = e, num = num);
-                            } else {
-                                println!("On tree {num}, got error {e}, with relevant file descriptions at {0}, {1}", fdwc, fdwc1, e = e, num = num);
-                            };
-                        } else { break; }
+                        match sat.add(fdwc) {
+                            Err((_fdwc, e)) => {
+                                fdwc = _fdwc;
+                                let (fdwc1, fdwc2) = match e {
+                                    SegmentArrayTreeError::IntersectingSegment(idx) =>
+                                        (sat.get_by_idx(idx), None),
+                                    SegmentArrayTreeError::OverlappingSegmentArrays(idx1, idx2) =>
+                                        (sat.get_by_idx(idx1), Some(sat.get_by_idx(idx2))),
+                                    SegmentArrayTreeError::IncompatibleSegmentArrays(idx) =>
+                                        (sat.get_by_idx(idx), None),
+                                };
+                                if let Some(fdwc2) = fdwc2 {
+                                    println!("On tree {num}, got error {e}, with relevant file descriptions at {0}, {1}, {2}", fdwc, fdwc1, fdwc2, e = e, num = num);
+                                } else {
+                                    println!("On tree {num}, got error {e}, with relevant file descriptions at {0}, {1}", fdwc, fdwc1, e = e, num = num);
+                                };
+                            } 
+                            Ok(AddStatus::Replaced(fdwc1)) => {
+                                println!("On tree {num}, replaced file description at {fdwc}", num = num, fdwc = fdwc1);
+                                break;
+                            }
+                            _ => { break; }
+                        }
                     }
 
                     if add_new_tree {
