@@ -2,7 +2,8 @@
 use super::segment_tree::{Segment, SegmentTree, SegmentTreeError, Entry};
 
 use std::marker::PhantomData;
-use std::slice;
+use std::{slice, vec};
+use std::iter::IntoIterator;
 
 use thiserror::Error;
 
@@ -105,6 +106,13 @@ impl<M, I> SegmentArrayTree<M, I> where M: AsRef<[I]>, for<'a> &'a I: Into<Segme
     pub fn iter<'a>(&'a self) -> slice::Iter<'a, M> { self.segment_arrays.iter() }
 }
 
+impl<M, I> IntoIterator for SegmentArrayTree<M, I> {
+    type Item = M;
+    type IntoIter = vec::IntoIter<M>;
+    fn into_iter(self) -> Self::IntoIter { self.segment_arrays.into_iter() }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::{SegmentArrayTree, SegmentArrayTreeError, AddStatus};
@@ -163,6 +171,7 @@ mod tests {
             assert_eq!(sat.get_by_idx(i).num, 30);
         });
         assert_eq!(sat.iter().map(|sv| sv.num).collect::<HashSet<u64>>(), HashSet::<u64>::from_iter(vec![10, 30]));
+        assert_eq!(sat.into_iter().map(|sv| sv.num).collect::<HashSet<u64>>(), HashSet::<u64>::from_iter(vec![10, 30]));
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
