@@ -44,9 +44,9 @@ fn main() {
                         desc_name: name,
                     };
                     let mut add_new_tree = false;
-                    let len = sats.len();
+                    let last = sats.len() - 1;
                     for (num, sat) in sats.iter_mut().enumerate() {
-                        if num == len {
+                        if num == last {
                             add_new_tree = true;
                         }
                         if let Err((_fdwc, e)) = sat.add(fdwc) {
