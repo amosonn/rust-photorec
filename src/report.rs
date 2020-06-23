@@ -159,6 +159,15 @@ impl<'a> FromIterator<(String, &'a FileDescription)> for ReportXml {
     }
 }
 
+impl FromIterator<(String, FileDescription)> for ReportXml {
+    fn from_iter<T>(t: T) -> Self where T: IntoIterator<Item=(String, FileDescription)> {
+        ReportXml {
+            image_filename: None,
+            elems: t.into_iter().map(|(s, fd)| from_file_description_and_name(s, &fd)).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ReportXml, ReportXmlError};
@@ -266,18 +275,34 @@ mod tests {
             assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
             assert!(rx_i.next().is_none());
         }
+
+        let fds = vec![("a".to_owned(), fd1), ("b".to_owned(), fd2)];
+        let rx = ReportXml::from_iter(fds);
+        {
+            let mut rx_i = rx.iter();
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "a");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "b");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
+            assert!(rx_i.next().is_none());
+        }
+
         let mut buf = Cursor::new(Vec::new());
         rx.write(&mut buf).unwrap();
         buf.seek(SeekFrom::Start(0)).unwrap();
         let rx = ReportXml::parse(buf).unwrap();
-        let mut rx_i = rx.iter();
-        let e = rx_i.next().unwrap().unwrap();
-        assert_eq!(e.0, "a");
-        assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
-        let e = rx_i.next().unwrap().unwrap();
-        assert_eq!(e.0, "b");
-        assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
-        assert!(rx_i.next().is_none());
+        {
+            let mut rx_i = rx.iter();
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "a");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs1);
+            let e = rx_i.next().unwrap().unwrap();
+            assert_eq!(e.0, "b");
+            assert_eq!(e.1.as_ref().iter().map(|x| *x).collect::<Vec<_>>(), brs2);
+            assert!(rx_i.next().is_none());
+        }
     }
 
     #[test]
