@@ -11,15 +11,3 @@ thiserror = "1.0.19"
 
 [dev-dependencies]
 quote = "1.0.0"
-
-[[bin]]
-name = "photorec-merge"
-path = "src/bin/photorec-merge.rs"
-
-[[bin]]
-name = "photorec-size"
-path = "src/bin/photorec-size.rs"
-
-[[bin]]
-name = "photorec-read"
-path = "src/bin/photorec-size.rs"
