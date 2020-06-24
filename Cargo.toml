@@ -19,3 +19,7 @@ path = "src/bin/photorec-merge.rs"
 [[bin]]
 name = "photorec-size"
 path = "src/bin/photorec-size.rs"
+
+[[bin]]
+name = "photorec-read"
+path = "src/bin/photorec-size.rs"
