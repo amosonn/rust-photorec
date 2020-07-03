@@ -4,7 +4,8 @@ use std::fs::File;
 use std::fmt::{Formatter, Error as FmtError, Display};
 use std::{path::Path, iter::FromIterator};
 
-use photorec::{SegmentArrayTree, SegmentArrayTreeError, ReportXml, FileDescription, ByteRun, AddStatus};
+use photorec::{ReportXml, FileDescription, ByteRun};
+use segment_tree::{SegmentArrayTree, SegmentArrayTreeError, AddStatus};
 
 #[derive(Debug)]
 struct FileDescriptionWithContext<'a> {

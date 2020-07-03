@@ -1,13 +1,7 @@
-[package]
-name = "photorec"
-version = "0.1.0"
-authors = ["Amos Onn <amosonn@gmail.com>"]
-description = "Rust interface for using photorec report.xml files."
-edition = "2018"
+[workspace]
 
-[dependencies]
-xmltree = "0.10.0"
-thiserror = "1.0.19"
-
-[dev-dependencies]
-quote = "1.0.0"
+members = [
+    "photorec",
+    "segment_tree",
+    "assert_let",
+]

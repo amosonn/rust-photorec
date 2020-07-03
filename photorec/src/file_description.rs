@@ -9,7 +9,7 @@ use std::mem;
 
 use thiserror::Error;
 
-use crate::segment_tree::Segment;
+use segment_tree::Segment;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct ByteRun {
