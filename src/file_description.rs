@@ -103,6 +103,36 @@ impl FileDescription {
         })
     }
 
+    pub fn new_allow_missing<T: IntoIterator<Item=ByteRun>>(size: u64, runs: T) -> Result<Self, FileDescriptionError> {
+        let mut runs: Vec<ByteRun> = runs.into_iter().collect();
+        if runs.len() == 0 { return Err(FileDescriptionError::Empty); }
+        runs.sort_unstable();
+        let runs = runs;
+
+        let mut off = 0;
+        let mut it = runs.iter();
+        let mut br = it.next().unwrap();
+        // First check the first ByteRun starts at 0
+        if br.file_offset != 0 { return Err(FileDescriptionError::PreGap(*br)); }
+        off += br.len;
+        // Then check all the following ByteRun-s come one after another
+        for br2 in it {
+            if off > size { return Err(FileDescriptionError::Trailing(*br2, size)); }
+            if br2.file_offset > off { return Err(FileDescriptionError::Gap(*br, *br2)); }
+            else if br2.file_offset < off { return Err(FileDescriptionError::Overlap(*br, *br2)); }
+            br = br2;
+            off += br.len;
+        }
+
+        // The last block sometimes needs to be trimmed
+        let mut runs = runs;
+        runs.last_mut().unwrap().len -= off.saturating_sub(size);
+        Ok(FileDescription {
+            runs: runs.into_boxed_slice(),
+            size: off.min(size),
+        })
+    }
+
     pub fn size(&self) -> u64 { self.size }
 }
 

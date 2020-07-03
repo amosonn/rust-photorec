@@ -78,7 +78,7 @@ fn to_file_description(elem: &Element) -> Result<(String, FileDescription)> {
             let len = get_attr_number(x, "len")?;
             Ok(ByteRun { file_offset, disk_pos, len })
         }).collect::<Result<Vec<ByteRun>>>()?;
-    let file_description = FileDescription::new(size, byte_runs)
+    let file_description = FileDescription::new_allow_missing(size, byte_runs)
         .map_err(|e| ReportXmlError::BadFileDescription { file_name: name.clone(), source: e })?;
     Ok((name, file_description))
 }
